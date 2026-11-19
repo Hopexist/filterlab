@@ -61,6 +61,31 @@ const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
     if (on && !on.ok) problems.push('error-feedback noise is more than 3 dB from theory in the app');
     await p.evaluate(() => { document.getElementById('qOver').value = 'wrap'; document.getElementById('qOver').dispatchEvent(new Event('change')); });
     await p.wait(300); await p.screenshot(path.join(SHOTS, 'quant-ef-wrap.png'));
+    const diagram = await p.evaluate(() => !!document.querySelector('svg.df') && !!document.querySelector('svg.df .df-ef'));
+    console.log('DF-I diagram with error-feedback path:', diagram);
+    if (!diagram) problems.push('signal-flow diagram (with the error-feedback path) missing on the Quantization tab');
+
+    // compare mode: pin A as B, change the design, B must stay drawn dashed with its own legend entry
+    await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'cheby1', btype: 'lowpass', edges: [1000, 1500], rp: 1, rs: 60, orderMode: 'auto' }); });
+    await p.click('[data-tab=response]'); await p.wait(300); await p.click('#pinB'); await p.wait(200);
+    await p.evaluate(() => { const s = window.__filterlab.state; s.method = 'ellip'; }); await p.click('[data-tab=time]'); await p.click('[data-tab=response]'); await p.wait(300);
+    const cmp = await p.evaluate(() => ({ dashed: document.querySelectorAll('#cMag path.trace[stroke-dasharray]').length, legend: document.querySelector('#view .legend')?.textContent || '' }));
+    console.log('compare mode:', cmp.dashed, 'dashed trace,', JSON.stringify(cmp.legend.slice(0, 80)));
+    if (cmp.dashed !== 1 || !/B: Chebyshev I/.test(cmp.legend)) problems.push('compare mode did not draw the pinned design B');
+    await p.screenshot(path.join(SHOTS, 'compare.png'));
+    await p.click('#pinB');
+
+    // phone layout: tab bar fixed to the bottom of the viewport, no horizontal scrolling, 44 px targets
+    await p.setViewport(390, 844); await p.wait(400);
+    const phone = await p.evaluate(() => {
+      const t = document.querySelector('.tabs'), r = t.getBoundingClientRect(), small = [...document.querySelectorAll('.tabs button, .seg button, .controls summary')].filter(b => b.getBoundingClientRect().height > 0 && b.getBoundingClientRect().height < 44).length;
+      return { fixed: getComputedStyle(t).position === 'fixed', atBottom: Math.abs(r.bottom - innerHeight) < 2, overflow: document.documentElement.scrollWidth - innerWidth, small };
+    });
+    console.log('phone 390 px:', JSON.stringify(phone));
+    if (!phone.fixed || !phone.atBottom) problems.push('phone tab bar is not fixed to the bottom');
+    if (phone.overflow > 0) problems.push(`phone layout scrolls sideways by ${phone.overflow} px`);
+    if (phone.small) problems.push(`${phone.small} tab, segment or group controls are under 44 px tall on a phone`);
+    await p.setViewport(1440, 1000);
   } catch (e) {
     problems.push('script error: ' + e.message);
   } finally {

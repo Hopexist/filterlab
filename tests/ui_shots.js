@@ -15,6 +15,8 @@ const SHOTS = path.resolve(__dirname, '..', 'shots');
         for (const tab of ['response', 'time', 'quant']) {
           await p.click(`[data-tab=${tab}]`); await p.wait(400);
           await p.screenshot(path.join(SHOTS, `${scheme}-${w}-${tab}.png`)); n++;
+          // phone: also what the first screen really looks like (a full-page capture draws the fixed tab bar mid-page)
+          if (w < 500) { await p.evaluate(() => window.scrollTo(0, 0)); await p.screenshot(path.join(SHOTS, `${scheme}-${w}-${tab}-viewport.png`), { fullPage: false }); n++; }
         }
       }
   } catch (e) {

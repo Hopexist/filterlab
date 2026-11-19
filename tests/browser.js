@@ -109,9 +109,11 @@ async function launch({ width = 1440, height = 1000 } = {}) {
       for (let i = 1; i <= steps; i++) await page.mouse('mouseMoved', x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps);
       await page.mouse('mouseReleased', x1, y1);
     },
-    async screenshot(file) {
+    async screenshot(file, { fullPage = true } = {}) {
       const { cssContentSize: c } = await s('Page.getLayoutMetrics');
-      const { data } = await s('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: 0, width: Math.ceil(c.width), height: Math.ceil(c.height), scale: 1 } });
+      const { data } = await s('Page.captureScreenshot', fullPage
+        ? { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: 0, width: Math.ceil(c.width), height: Math.ceil(c.height), scale: 1 } }
+        : { format: 'png' });
       fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, Buffer.from(data, 'base64'));
     },
   };

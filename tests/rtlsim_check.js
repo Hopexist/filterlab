@@ -59,6 +59,8 @@ for (const [what, txt] of [
   ['two drivers', base.replace('assign yr = acc;', 'assign yr = acc;\n  assign yr = acc;')],
   ['bit select', base.replace('assign yr = acc;', 'assign yr = acc[3];')],
   ['equality', base.replace('assign yr = acc;', 'assign yr = (acc == 3) ? acc : acc;')],
+  ['reserved word as a name', base.replace(/\bacc\b/g, 'case')],
+  ['unsized literal over 32 bits', base.replace('assign yr = acc;', 'assign yr = acc + 4294967295;')],
   ['combinational loop', base.replace('assign yr = acc;', 'assign yr = acc + yr;')],
 ]) {
   let msg = ''; try { S.run(txt, [1, 2, 3]); } catch (e) { msg = e.message; }
@@ -78,6 +80,12 @@ check('>>> is logical on unsigned', one("logic [7:0] u; logic signed [15:0] o;\n
 check('assignment truncates (wrap)', one("logic signed [3:0] n;\n assign n = 5'sd9;", 'out_data <= n;') === -7);
 check('context width: 8-bit operands in a 16-bit sum do not overflow', one('logic signed [15:0] o;\n assign o = in_data + in_data;', 'out_data <= o;', 127) === 254);
 check('compare result is 1-bit unsigned', one("logic signed [15:0] o;\n assign o = (in_data > 8'sd3) + 16'sd0;", 'out_data <= o;', 5) === 1);
+check('shift amount is self-determined in its own (signed) type', one("logic signed [3:0] a; logic signed [7:0] b; logic signed [15:0] o;\n assign a = -4'sd1; assign b = 8'sd3; assign o = 16'sd1024 >>> (a + b);", 'out_data <= o;') === 256);
+check('?: with an unsigned branch is unsigned', one("logic [7:0] u; logic signed [7:0] s; logic signed [15:0] o;\n assign u = 8'd5; assign s = -8'sd1; assign o = (in_data > 8'sd0) ? u : s;", 'out_data <= o;', -1) === 255);
+check('signed vs unsigned compare is unsigned', one("logic signed [15:0] o;\n assign o = (-8'sd1 < 8'd1) + 16'sd0;", 'out_data <= o;') === 0);
+{ const txt = mod('logic signed [15:0] a, b;', "if (rst) begin a <= 16'sd1; b <= 16'sd2; end else begin a <= b; b <= a; out_data <= a; end"), sim = S.create(txt);
+  sim.step({ rst: 1, in_valid: 0, in_data: 0 }); const o = [1, 2, 3].map(() => Number(sim.step({ rst: 0, in_valid: 1, in_data: 0 }).after.out_data));
+  check('non-blocking swap (a <= b; b <= a)', JSON.stringify(o) === '[1,2,1]', JSON.stringify(o)); }
 check('register is X until assigned', S.run(mod('', 'if (rst) out_valid <= 1\'b0;'), [1]).y[0] === null);
 
 // 5. BigInt: widths beyond 53 bits stay exact (40 fraction bits on the coefficients, 60-bit accumulator)

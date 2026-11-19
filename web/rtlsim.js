@@ -1,4 +1,5 @@
-/* In-browser interpreter for the SystemVerilog subset that dsp/rtl.py and web/rtl.js emit (logic of tests/rtl_eval.py).
+/* In-browser interpreter for the SystemVerilog subset that dsp/rtl.py and web/rtl.js emit. Same job as tests/rtl_eval.py,
+ * but a separate implementation: a tokenizer and parser with explicit IEEE 1800 sizing, where rtl_eval.py uses regexes and Python ints.
  * It parses the generated TEXT, never the design parameters, and runs it one clock edge at a time.
  *
  * Subset: `module name (ports);` with `input|output logic [signed] [N:0] name` ports; `logic [signed] [N:0] a, b;`;
@@ -16,6 +17,11 @@
 (function (root) {
 'use strict';
 const KW = new Set(['module', 'endmodule', 'input', 'output', 'logic', 'signed', 'assign', 'always_ff', 'posedge', 'begin', 'end', 'if', 'else']);
+// other reserved words (IEEE 1800 Annex B, the ones a hand edit is likely to use): never accepted as names
+const RESERVED = new Set(('always always_comb always_latch and assert automatic bit byte case casex casez default defparam disable do edge else '
+  + 'endcase endfunction endgenerate endtask enum for force forever fork function generate genvar initial inout int integer localparam '
+  + 'longint negedge not or output parameter reg repeat return shortint struct supply0 supply1 task time tri typedef union unique '
+  + 'unsigned var void wait while wire wor xor').split(' '));
 const unsupported = (what, line) => { throw new Error(`unsupported construct: ${what} (line ${line}). The interpreter only runs the subset Filterlab generates.`); };
 
 function lex(text) {
@@ -29,8 +35,8 @@ function lex(text) {
       if (w < 1 || !(base === 'd' ? /^\d+$/ : /^[01]+$/).test(digits)) unsupported(`literal ${s}`, line);
       toks.push({ t: 'num', v: BigInt(base === 'd' ? digits : '0b' + digits), w, s: m[2] === 's', line, src: s });
     } else if (s === "'0") toks.push({ t: 'num', v: 0n, w: 1, s: false, line, src: s });
-    else if (/^\d/.test(s)) toks.push({ t: 'num', v: BigInt(s), w: 32, s: true, line, src: s });
-    else if (/^[A-Za-z_]/.test(s)) toks.push({ t: KW.has(s) ? s : 'id', v: s, line, src: s });
+    else if (/^\d/.test(s)) { if (BigInt(s) >= 2n ** 31n) unsupported(`unsized literal ${s} (does not fit 32-bit signed)`, line); toks.push({ t: 'num', v: BigInt(s), w: 32, s: true, line, src: s }); }
+    else if (/^[A-Za-z_]/.test(s)) { if (!KW.has(s) && RESERVED.has(s)) unsupported(`keyword '${s}'`, line); toks.push({ t: KW.has(s) ? s : 'id', v: s, line, src: s }); }
     else if (/^(<<<|>>>|<=|[()[\]:;,?@=+\-*<>])$/.test(s)) toks.push({ t: s, line, src: s });
     else unsupported(`character '${s}'`, line);
   }
@@ -152,8 +158,9 @@ function ev(e, W, S, env, sig) {
       return norm(e.op === '+' ? a + b : e.op === '-' ? a - b : a * b, W, S);
     }
     case '<<<': case '>>>': {
-      const a = ev(e.a, W, S, env, sig), bs = size(e.b, sig), b = ev(e.b, bs.w, false, env, sig);   // amount is unsigned
-      if (a === null || b === null) return null;
+      const a = ev(e.a, W, S, env, sig), bs = size(e.b, sig), b0 = ev(e.b, bs.w, bs.s, env, sig);   // amount: self-determined in its own type,
+      if (a === null || b0 === null) return null;
+      const b = norm(b0, bs.w, false);                                                                  // then read as unsigned
       if (e.op === '<<<') return b >= BigInt(W) ? 0n : norm(a << b, W, S);
       return b >= BigInt(W) ? (a < 0n ? -1n : 0n) : a >> b;    // BigInt >> floors: arithmetic for signed, logical for unsigned (a >= 0)
     }

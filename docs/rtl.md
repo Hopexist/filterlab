@@ -101,8 +101,9 @@ header states the derivation and the numbers.
    `build/rtl/` and runs `iverilog -g2012` + `vvp`, requiring `PASS`. It is skipped, with a clear message,
    when Icarus Verilog is not installed. **It has not run yet.**
 
-5. **In-browser interpreter** (`web/rtlsim.js`, `npm run test:rtlsim`, 80 checks). It is a second, separately
-   written executor (see the next section). It runs 10 designs (the 8 above plus an unscaled cascade that really
+5. **In-browser interpreter** (`web/rtlsim.js`, `npm run test:rtlsim`, 86 checks). It is a second, separately
+   written executor (a parser rather than regexes, but by the same author from the same reading of the standard;
+   see the next section). It runs 10 designs (the 8 above plus an unscaled cascade that really
    saturates and wraps) on 512 samples each, and its output must equal the Python evaluator's, the Python bit-true
    model's and the JS bit-true model's. A one-bit flip of one coefficient literal must be detected.
 
@@ -139,7 +140,8 @@ the generated text, not the design parameters: a hand edit to the text changes w
 - `//` comments.
 
 Anything else is rejected with "unsupported construct: ..." and its line number. That includes `/`, `==`, bit
-selects, concatenation, `wire`, plain `always`, `initial`, system tasks, a second driver, an undeclared name and a
+selects, concatenation, `wire` and other reserved words, plain `always`, `initial`, system tasks, unsized literals
+that do not fit 32 bits, a second driver, an undeclared name and a
 combinational loop.
 
 **Rules it applies** (IEEE 1800-2017, 11.6 to 11.8).
@@ -165,7 +167,7 @@ combinational loop.
 **Limits.**
 - It is not a general SystemVerilog simulator. It has no event scheduler, no `#` delays, and no X/Z bit
   semantics. A register is X until it is assigned, and any X operand makes the whole result X; that is a
-  conservative stand-in for 4-state logic.
+  conservative stand-in for 4-state logic. A real simulator can be less pessimistic: `c ? 4 : 4` with c = X gives 4 there, X here.
 - It models one clock and treats each step as one rising edge.
 - The interpreter and the generator were written by the same project from the same reading of the standard. If
   both misread a rule the same way, they agree with each other and can still be wrong. The Python evaluator, the

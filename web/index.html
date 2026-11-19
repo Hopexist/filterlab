@@ -1,0 +1,1106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filterlab: digital filter design</title>
+<style>:root {
+  color-scheme: light;
+  --bg: #e8ecf0; --panel: #fcfcfb; --panel-2: #f3f5f7; --ink: #14202c; --ink-2: #4d5b69; --ink-3: #66737f;
+  --line: #d4dbe2; --grid: #e6eaee; --accent: #1c4f9c; --accent-ink: #ffffff; --accent-soft: #e4edf9;
+  --s1: #2a78d6; --s2: #eb6834; --good: #0b7a3b; --bad: #c23a39; --shade: rgba(227, 73, 72, .055); --shade-line: rgba(227, 73, 72, .55);
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1215; --panel: #1a1d20; --panel-2: #212529; --ink: #eceef0; --ink-2: #b3bcc5; --ink-3: #8f9aa5;
+  --line: #2f353b; --grid: #262b30; --accent: #7db0f0; --accent-ink: #0d1722; --accent-soft: #1f2d40;
+  --s1: #3987e5; --s2: #d95926; --good: #3fbf72; --bad: #ee7373; --shade: rgba(238, 115, 115, .09); --shade-line: rgba(238, 115, 115, .6);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; margin: 0; letter-spacing: -.01em; }
+.num { font-variant-numeric: tabular-nums; }
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; }
+.brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.brand h1 { font-size: 24px; }
+.brand span { color: var(--ink-2); }
+.top-actions { display: flex; gap: 8px; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+.btn:hover { background: var(--panel-2); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+
+.app { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 0 24px 32px; align-items: start; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.controls { padding: 6px 16px 16px; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+.controls section { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.controls section:last-child { border-bottom: 0; }
+.controls h3 { font-size: 15px; margin-bottom: 10px; }
+.method { display: grid; gap: 6px; }
+.method label { display: grid; grid-template-columns: 18px 1fr; gap: 0 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: var(--panel); }
+.method label:hover { background: var(--panel-2); }
+.method input { grid-row: 1 / span 2; margin-top: 3px; accent-color: var(--accent); }
+.method b { font-weight: 600; }
+.method small { color: var(--ink-3); font-size: 12px; }
+.method label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 7px 4px; cursor: pointer; border-right: 1px solid var(--line); display: grid; justify-items: center; gap: 3px; font-size: 12px; color: var(--ink-2); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.seg svg { width: 34px; height: 16px; }
+.field { display: grid; grid-template-columns: 1fr 96px; align-items: center; gap: 8px; margin-top: 8px; }
+.field label { color: var(--ink-2); }
+.field input, .field select, .row select { width: 100%; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 5px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.field select { text-align: left; }
+.field input:invalid { border-color: var(--bad); }
+.unit { color: var(--ink-3); font-size: 12px; }
+.hint { color: var(--ink-3); font-size: 12px; margin: 8px 0 0; }
+.hidden { display: none !important; }
+
+.stage { min-width: 0; display: grid; gap: 14px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tabs button { background: none; border: 0; padding: 10px 16px; cursor: pointer; color: var(--ink-2); border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+.col { display: grid; gap: 14px; min-width: 0; }
+.card { padding: 14px 16px 12px; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
+.card-head h2 { font-size: 17px; }
+.card-head .tools { display: flex; gap: 6px; align-items: center; color: var(--ink-3); font-size: 12px; }
+.tools .seg { font-size: 12px; }
+.tools .seg button { padding: 3px 10px; display: block; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 2px 0 4px; color: var(--ink-2); font-size: 12px; }
+.legend i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+.legend i.dash { border-top-style: dashed; }
+
+.chart { position: relative; width: 100%; touch-action: pan-y; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { fill: var(--ink-3); font-size: 11px; font-family: var(--sans); font-variant-numeric: tabular-nums; }
+.chart .axis-title { fill: var(--ink-2); font-size: 12px; }
+.chart .grid line { stroke: var(--grid); }
+.chart .frame { stroke: var(--line); fill: none; }
+.chart .trace { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .handle { cursor: ew-resize; outline: none; }
+.chart .handle:focus-visible .tab { stroke: var(--accent); stroke-width: 3; fill: var(--accent); }
+.chart .handle:hover .tab, .chart .handle.active .tab { fill: var(--accent); }
+.chart .edge { stroke: var(--ink-3); stroke-dasharray: 4 4; }
+.chart .tab { fill: var(--ink-2); }
+.chart .tabtxt { fill: var(--panel); font-size: 10px; font-weight: 600; }
+.chart .shade { fill: var(--shade); stroke: none; }
+.chart .shade-edge { stroke: var(--shade-line); stroke-width: 1.5; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; box-shadow: 0 2px 10px rgba(0, 0, 0, .12); white-space: nowrap; z-index: 3; font-variant-numeric: tabular-nums; }
+.tip b { font-weight: 600; }
+.tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+details.data { margin-top: 6px; color: var(--ink-2); font-size: 12px; }
+details.data summary { cursor: pointer; }
+details.data table { margin-top: 6px; }
+table.t { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 12px; }
+table.t th, table.t td { text-align: right; padding: 3px 8px; border-bottom: 1px solid var(--line); }
+table.t th:first-child, table.t td:first-child { text-align: left; }
+table.t th { color: var(--ink-3); font-weight: 500; }
+.scroll { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+
+.score { display: grid; gap: 10px; }
+.score .row { display: grid; grid-template-columns: 22px 1fr auto; gap: 4px 10px; align-items: baseline; }
+.score .ic { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; }
+.score .ic.ok { background: var(--good); } .score .ic.no { background: var(--bad); }
+.score .lab { color: var(--ink-2); }
+.score .val { font-family: var(--serif); font-size: 20px; }
+.score .sub { grid-column: 2 / span 2; color: var(--ink-3); font-size: 12px; margin-top: -4px; }
+.banner { border: 1px solid var(--bad); background: var(--shade); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.banner.info { border-color: var(--line); background: var(--panel-2); }
+
+.slider { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; }
+.slider input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.slider .big { font-family: var(--serif); font-size: 20px; }
+.qctl { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px; align-items: start; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--panel); padding: 8px 14px; border-radius: 8px; z-index: 10; }
+
+@media (max-width: 1180px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) { .app { grid-template-columns: minmax(0, 1fr); padding: 0 12px 24px; } .controls { position: static; max-height: none; } .top { padding: 12px; } .brand span { display: none; } }
+@media (prefers-reduced-motion: no-preference) {
+  .trace.draw { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: draw .9s cubic-bezier(.3, .6, .2, 1) forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><h1>Filterlab</h1><span id="subtitle">Digital filter design</span></div>
+  <div class="top-actions"><button class="btn" id="copyPy" title="Copy the Python call that reproduces this design">Copy Python</button><button class="btn" id="theme">Dark theme</button></div>
+</header>
+<main class="app">
+  <aside class="panel controls" id="controls" aria-label="Filter design controls"></aside>
+  <section class="stage">
+    <div class="tabs" role="tablist" aria-label="Views">
+      <button role="tab" data-tab="response" aria-selected="true">Response</button>
+      <button role="tab" data-tab="time" aria-selected="false">Time and coefficients</button>
+      <button role="tab" data-tab="quant" aria-selected="false">Quantization</button>
+    </div>
+    <div id="view" role="tabpanel" aria-live="polite"></div>
+  </section>
+</main>
+<script>/* filterlab DSP engine - port of the tested Python reference (dsp/*.py). No dependencies. */
+(function (root) {
+'use strict';
+const PI = Math.PI;
+
+/* ---------------- complex helpers ---------------- */
+const cx = (re, im = 0) => ({ re, im });
+const cadd = (a, b) => cx(a.re + b.re, a.im + b.im);
+const csub = (a, b) => cx(a.re - b.re, a.im - b.im);
+const cmul = (a, b) => cx(a.re * b.re - a.im * b.im, a.re * b.im + a.im * b.re);
+const cdiv = (a, b) => { const d = b.re * b.re + b.im * b.im; return cx((a.re * b.re + a.im * b.im) / d, (a.im * b.re - a.re * b.im) / d); };
+const cscale = (a, s) => cx(a.re * s, a.im * s);
+const cconj = a => cx(a.re, -a.im);
+const cabs = a => Math.hypot(a.re, a.im);
+const csqrt = a => { const r = cabs(a); const re = Math.sqrt((r + a.re) / 2); const im = Math.sqrt(Math.max((r - a.re) / 2, 0)); return cx(re, a.im < 0 ? -im : im); };
+const cexp = a => { const e = Math.exp(a.re); return cx(e * Math.cos(a.im), e * Math.sin(a.im)); };
+const csinh = a => cx(Math.sinh(a.re) * Math.cos(a.im), Math.cosh(a.re) * Math.sin(a.im));
+const cprod = arr => arr.reduce((p, x) => cmul(p, x), cx(1, 0));
+
+/* ---------------- FIR: windows ---------------- */
+function bessI0(x) { let s = 1, t = 1; const q = x * x / 4; for (let k = 1; k < 60; k++) { t *= q / (k * k); s += t; if (t < 1e-18 * s) break; } return s; }
+
+function windowFn(name, N, beta = 8.6) {
+  const w = new Float64Array(N); const m = N - 1;
+  if (N === 1) { w[0] = 1; return w; }
+  for (let n = 0; n < N; n++) {
+    switch (name) {
+      case 'rect': w[n] = 1; break;
+      case 'hann': w[n] = 0.5 - 0.5 * Math.cos(2 * PI * n / m); break;
+      case 'hamming': w[n] = 0.54 - 0.46 * Math.cos(2 * PI * n / m); break;
+      case 'blackman': w[n] = 0.42 - 0.5 * Math.cos(2 * PI * n / m) + 0.08 * Math.cos(4 * PI * n / m); break;
+      case 'kaiser': { const r = 2 * n / m - 1; w[n] = bessI0(beta * Math.sqrt(Math.max(1 - r * r, 0))) / bessI0(beta); break; }
+      default: throw new Error('unknown window ' + name);
+    }
+  }
+  return w;
+}
+
+function kaiserParams(attenDb, transHz, fs) {
+  const A = attenDb;
+  const beta = A > 50 ? 0.1102 * (A - 8.7) : (A >= 21 ? 0.5842 * Math.pow(A - 21, 0.4) + 0.07886 * (A - 21) : 0);
+  const dw = 2 * PI * transHz / fs;
+  let N = Math.ceil((A - 7.95) / (2.285 * dw) + 1);
+  return { numtaps: N | 1, beta };
+}
+
+const sinc = x => x === 0 ? 1 : Math.sin(PI * x) / (PI * x);
+
+function firWindow(numtaps, edges, kind, win, fs, beta = 8.6) {
+  if ((kind === 'highpass' || kind === 'bandstop') && numtaps % 2 === 0) numtaps += 1;
+  const M = (numtaps - 1) / 2; const w = edges.map(e => 2 * PI * e / fs);
+  const lp = (wc, k) => (wc / PI) * sinc(wc * k / PI);
+  const win_ = windowFn(win, numtaps, beta); const h = new Float64Array(numtaps);
+  for (let n = 0; n < numtaps; n++) {
+    const k = n - M; const d = (numtaps % 2 && n === M) ? 1 : 0; let v;
+    if (kind === 'lowpass') v = lp(w[0], k);
+    else if (kind === 'highpass') v = d - lp(w[0], k);
+    else if (kind === 'bandpass') v = lp(w[1], k) - lp(w[0], k);
+    else v = d - (lp(w[1], k) - lp(w[0], k));
+    h[n] = v * win_[n];
+  }
+  return h;
+}
+
+/* ---------------- FIR: Parks-McClellan ---------------- */
+function bary(xg, xs, C, bs) {
+  const A = new Float64Array(xg.length);
+  for (let i = 0; i < xg.length; i++) {
+    let num = 0, den = 0, hit = -1;
+    for (let j = 0; j < xs.length; j++) {
+      const d = xg[i] - xs[j];
+      if (Math.abs(d) < 1e-13) { hit = j; break; }
+      const t = bs[j] / d; num += t * C[j]; den += t;
+    }
+    A[i] = hit >= 0 ? C[hit] : num / den;
+  }
+  return A;
+}
+function bweights(x) {
+  const b = new Float64Array(x.length);
+  for (let i = 0; i < x.length; i++) { let p = 1; for (let j = 0; j < x.length; j++) if (j !== i) p *= (x[i] - x[j]); b[i] = 1 / p; }
+  return b;
+}
+
+/** bands: flat edge list in Hz; desired/weight per band. Odd numtaps only. */
+function remez(numtaps, bands, desired, weight, fs, opts = {}) {
+  const gridDensity = opts.gridDensity || 20, maxiter = opts.maxiter || 80, tol = opts.tol || 1e-9;
+  if (numtaps % 2 === 0) throw new Error('odd numtaps required');
+  const M = (numtaps - 1) / 2, R = M + 2;
+  const edges = bands.map(b => b / (fs / 2) * PI); const nb = edges.length / 2;
+  weight = weight || new Array(nb).fill(1);
+  const widths = []; let wsum = 0;
+  for (let b = 0; b < nb; b++) { widths.push(edges[2 * b + 1] - edges[2 * b]); wsum += widths[b]; }
+  const total = gridDensity * (M + 1);
+  const wl = [], Dl = [], Wl = [], starts = []; let pos = 0;
+  for (let b = 0; b < nb; b++) {
+    const n = Math.max(Math.round(total * widths[b] / wsum), 8);
+    for (let i = 0; i < n; i++) { wl.push(edges[2 * b] + (edges[2 * b + 1] - edges[2 * b]) * i / (n - 1)); Dl.push(desired[b]); Wl.push(weight[b]); }
+    starts.push([pos, pos + n]); pos += n;
+  }
+  const L = wl.length, w = Float64Array.from(wl), D = Float64Array.from(Dl), W = Float64Array.from(Wl);
+  const xg = w.map(Math.cos);
+  let ext = []; for (let i = 0; i < R; i++) ext.push(Math.round(i * (L - 1) / (R - 1)));
+  ext = Array.from(new Set(ext));
+  while (ext.length < R) { const r = Math.floor(Math.random() * L); if (!ext.includes(r)) ext.push(r); ext.sort((a, b) => a - b); }
+  let delta = 0, it = 0;
+  const solve = ex => {
+    const x = Float64Array.from(ex.map(i => xg[i])), b = bweights(x);
+    let n1 = 0, d1 = 0; for (let i = 0; i < R; i++) { const s = i % 2 ? -1 : 1; n1 += b[i] * D[ex[i]]; d1 += b[i] * s / W[ex[i]]; }
+    const dl = n1 / d1; const C = new Float64Array(R);
+    for (let i = 0; i < R; i++) C[i] = D[ex[i]] - (i % 2 ? -1 : 1) * dl / W[ex[i]];
+    const xs = x.slice(0, R - 1), Cs = C.slice(0, R - 1);
+    return { dl, xs, Cs, bs: bweights(xs) };
+  };
+  for (it = 0; it < maxiter; it++) {
+    const sol = solve(ext); delta = sol.dl;
+    const A = bary(xg, sol.xs, sol.Cs, sol.bs); const E = new Float64Array(L); let Q = 0;
+    for (let i = 0; i < L; i++) { E[i] = W[i] * (D[i] - A[i]); Q = Math.max(Q, Math.abs(E[i])); }
+    const cand = [];
+    for (const [s, t] of starts) {
+      const last = t - s - 1;
+      for (let i = 0; i <= last; i++) {
+        const e = Math.abs(E[s + i]), sg = Math.sign(E[s + i]);
+        const left = i === 0 || e >= Math.abs(E[s + i - 1]) || sg !== Math.sign(E[s + i - 1]);
+        const right = i === last || e >= Math.abs(E[s + i + 1]) || sg !== Math.sign(E[s + i + 1]);
+        if (left && right) cand.push(s + i);
+      }
+    }
+    const keep = [];
+    for (const i of cand) {
+      if (keep.length && Math.sign(E[i]) === Math.sign(E[keep[keep.length - 1]])) { if (Math.abs(E[i]) > Math.abs(E[keep[keep.length - 1]])) keep[keep.length - 1] = i; }
+      else keep.push(i);
+    }
+    while (keep.length > R) { if (Math.abs(E[keep[0]]) < Math.abs(E[keep[keep.length - 1]])) keep.shift(); else keep.pop(); }
+    if (keep.length < R) break;
+    const same = keep.every((v, i) => v === ext[i]);
+    ext = keep;
+    if (same || (Q - Math.abs(delta)) / Q < tol) break;
+  }
+  const sol = solve(ext); delta = sol.dl;
+  const Ak = bary(Float64Array.from({ length: M + 1 }, (_, k) => Math.cos(2 * PI * k / numtaps)), sol.xs, sol.Cs, sol.bs);
+  const h = new Float64Array(numtaps);
+  for (let n = 0; n < numtaps; n++) {
+    let s = Ak[0]; for (let k = 1; k <= M; k++) s += 2 * Ak[k] * Math.cos(2 * PI * k / numtaps * (n - M));
+    h[n] = s / numtaps;
+  }
+  return { h, delta: Math.abs(delta), iterations: it + 1 };
+}
+
+/* ---------------- IIR ---------------- */
+function buttap(N) { const p = []; for (let m = -N + 1; m < N; m += 2) p.push(cscale(cexp(cx(0, PI * m / (2 * N))), -1)); return { z: [], p, k: 1 }; }
+function cheb1ap(N, rp) {
+  const eps = Math.sqrt(Math.pow(10, rp / 10) - 1), mu = Math.asinh(1 / eps) / N; const p = [];
+  for (let m = -N + 1; m < N; m += 2) p.push(cscale(csinh(cx(mu, PI * m / (2 * N))), -1));
+  let k = cprod(p.map(x => cscale(x, -1))).re; if (N % 2 === 0) k /= Math.sqrt(1 + eps * eps);
+  return { z: [], p, k };
+}
+function cheb2ap(N, rs) {
+  const de = 1 / Math.sqrt(Math.pow(10, rs / 10) - 1), mu = Math.asinh(1 / de) / N; const z = [], p = [];
+  for (let m = -N + 1; m < N; m += 2) {
+    if (m !== 0) { const s = Math.sin(m * PI / (2 * N)); z.push(cscale(cconj(cdiv(cx(0, 1), cx(s, 0))), -1)); }
+    const q = cscale(cexp(cx(0, PI * m / (2 * N))), -1);
+    p.push(cdiv(cx(1, 0), cx(Math.sinh(mu) * q.re, Math.cosh(mu) * q.im)));
+  }
+  const k = cdiv(cprod(p.map(x => cscale(x, -1))), cprod(z.map(x => cscale(x, -1)))).re;
+  return { z, p, k };
+}
+const deg = (z, p) => p.length - z.length;
+function lp2lp({ z, p, k }, wo) { return { z: z.map(x => cscale(x, wo)), p: p.map(x => cscale(x, wo)), k: k * Math.pow(wo, deg(z, p)) }; }
+function lp2hp({ z, p, k }, wo) {
+  const d = deg(z, p), kn = k * cdiv(cprod(z.map(x => cscale(x, -1))), cprod(p.map(x => cscale(x, -1)))).re;
+  return { z: z.map(x => cdiv(cx(wo), x)).concat(Array.from({ length: d }, () => cx(0))), p: p.map(x => cdiv(cx(wo), x)), k: kn };
+}
+function bandSplit(arr, wo) { const a = [], b = []; for (const x of arr) { const r = csqrt(csub(cmul(x, x), cx(wo * wo))); a.push(cadd(x, r)); b.push(csub(x, r)); } return a.concat(b); }
+function lp2bp({ z, p, k }, wo, bw) {
+  const d = deg(z, p), zl = z.map(x => cscale(x, bw / 2)), pl = p.map(x => cscale(x, bw / 2));
+  return { z: bandSplit(zl, wo).concat(Array.from({ length: d }, () => cx(0))), p: bandSplit(pl, wo), k: k * Math.pow(bw, d) };
+}
+function lp2bs({ z, p, k }, wo, bw) {
+  const d = deg(z, p), kn = k * cdiv(cprod(z.map(x => cscale(x, -1))), cprod(p.map(x => cscale(x, -1)))).re;
+  const zh = z.map(x => cdiv(cx(bw / 2), x)), ph = p.map(x => cdiv(cx(bw / 2), x));
+  let zz = bandSplit(zh, wo);
+  for (let i = 0; i < d; i++) zz.push(cx(0, wo), cx(0, -wo));
+  return { z: zz, p: bandSplit(ph, wo), k: kn };
+}
+function bilinear({ z, p, k }, fs) {
+  const f2 = 2 * fs, d = deg(z, p), F = cx(f2);
+  const zz = z.map(x => cdiv(cadd(F, x), csub(F, x))).concat(Array.from({ length: d }, () => cx(-1)));
+  const pz = p.map(x => cdiv(cadd(F, x), csub(F, x)));
+  const g = cdiv(cprod(z.map(x => csub(F, x))), cprod(p.map(x => csub(F, x)))).re;
+  return { z: zz, p: pz, k: k * g };
+}
+const prewarp = (f, fs) => 2 * fs * Math.tan(PI * f / fs);
+
+/** kind: butter|cheby1|cheby2; btype lp|hp|bp|bs; edges [f] or [f1,f2] Hz.
+ *  protoScale: optional analog prototype cutoff scale (used to put Butterworth -Rp dB at the passband edge). */
+function designIIR(kind, btype, order, edges, fs, rp = 1, rs = 40, protoScale = 1) {
+  let proto = kind === 'butter' ? buttap(order) : kind === 'cheby1' ? cheb1ap(order, rp) : cheb2ap(order, rs);
+  if (protoScale !== 1) proto = lp2lp(proto, protoScale);
+  const wa = edges.map(e => prewarp(e, fs)); let t;
+  if (btype === 'lowpass') t = lp2lp(proto, wa[0]);
+  else if (btype === 'highpass') t = lp2hp(proto, wa[0]);
+  else if (btype === 'bandpass') t = lp2bp(proto, Math.sqrt(wa[0] * wa[1]), wa[1] - wa[0]);
+  else t = lp2bs(proto, Math.sqrt(wa[0] * wa[1]), wa[1] - wa[0]);
+  const d = bilinear(t, fs); const sos = zpk2sos(d.z, d.p, d.k); const tf = sos2tf(sos);
+  return { z: d.z, p: d.p, k: d.k, sos, b: tf.b, a: tf.a };
+}
+
+function minOrder(kind, btype, passband, stopband, gp_db, gs_db, fs) {
+  const wp = passband.map(f => prewarp(f, fs)), ws = stopband.map(f => prewarp(f, fs)); let nat;
+  if (btype === 'lowpass') nat = ws[0] / wp[0];
+  else if (btype === 'highpass') nat = wp[0] / ws[0];
+  else if (btype === 'bandpass') nat = Math.min(...ws.map(s => Math.abs((s * s - wp[0] * wp[1]) / (s * (wp[1] - wp[0])))));
+  else { nat = Math.min(...ws.map(s => Math.abs(s * (wp[1] - wp[0]) / (s * s - wp[0] * wp[1])))); if (nat < 1) nat = 1 / nat; }
+  const gp = Math.pow(10, gp_db / 10) - 1, gs = Math.pow(10, gs_db / 10) - 1;
+  const n = kind === 'butter' ? Math.log10(gs / gp) / (2 * Math.log10(nat)) : Math.acosh(Math.sqrt(gs / gp)) / Math.acosh(nat);
+  return Math.max(1, Math.ceil(n - 1e-12));
+}
+
+function pairRoots(r, tol = 1e-9) {
+  const cplx = r.filter(x => x.im > tol), real = r.filter(x => Math.abs(x.im) <= tol).map(x => x.re).sort((a, b) => a - b);
+  const groups = cplx.map(c => [c, cconj(c)]);
+  while (real.length >= 2) groups.push([cx(real.shift()), cx(real.shift())]);
+  if (real.length) groups.push([cx(real.pop())]);
+  return groups;
+}
+function polyFromRoots(g) { // real polynomial 1 + c1 z^-1 + c2 z^-2 from a group of <=2 roots
+  if (g.length === 2) return [1, -(g[0].re + g[1].re), g[0].re * g[1].re - g[0].im * g[1].im];
+  if (g.length === 1) return [1, -g[0].re, 0];
+  return [1, 0, 0];
+}
+function zpk2sos(z, p, k) {
+  const pg = pairRoots(p).sort((x, y) => Math.max(...x.map(cabs)) - Math.max(...y.map(cabs)));
+  const zg = pairRoots(z); const sos = [];
+  for (const g of pg) {
+    let zz = [];
+    if (zg.length) {
+      const c = g.length === 2 ? cscale(cadd(g[0], g[1]), 0.5) : g[0];
+      let best = 0, bd = Infinity;
+      zg.forEach((q, j) => { const d = Math.min(...q.map(x => cabs(csub(x, c)))); if (d < bd) { bd = d; best = j; } });
+      zz = zg.splice(best, 1)[0];
+    }
+    sos.push(polyFromRoots(zz).concat(polyFromRoots(g)));
+  }
+  for (let i = 0; i < 3; i++) sos[0][i] *= k;
+  return sos;
+}
+function conv(a, b) { const o = new Array(a.length + b.length - 1).fill(0); for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) o[i + j] += a[i] * b[j]; return o; }
+function sos2tf(sos) { let b = [1], a = [1]; for (const s of sos) { b = conv(b, s.slice(0, 3)); a = conv(a, s.slice(3)); } return { b, a }; }
+
+/* ---------------- roots of a polynomial in z^-1 (zeros in the z-plane) ---------------- */
+function polyRoots(c) {
+  // Zeros of P(z) = sum_k c_k z^(n-k). Leading ~0 coefficients are roots at infinity (dropped);
+  // trailing ~0 coefficients are roots at the origin (kept).
+  c = Array.from(c); const tol = 1e-12 * Math.max(...c.map(Math.abs), 1e-300);
+  while (c.length > 1 && Math.abs(c[0]) <= tol) c.shift();
+  let atOrigin = 0; while (c.length > 1 && Math.abs(c[c.length - 1]) <= tol) { c.pop(); atOrigin++; }
+  const n = c.length - 1; const roots = [];
+  if (n >= 1) {
+    const a0 = c[0], P = z => { let r = cx(c[0] / a0); for (let i = 1; i <= n; i++) r = cadd(cmul(r, z), cx(c[i] / a0)); return r; };
+    const dP = z => { let r = cx(n * 1), t = cx(1); // derivative via Horner on coefficients
+      let acc = cx(0); for (let i = 0; i < n; i++) acc = cadd(cmul(acc, z), cx((n - i) * c[i] / a0)); return acc; };
+    const rad = Math.max(0.5, Math.pow(Math.abs(c[n] / a0), 1 / n));
+    const z = Array.from({ length: n }, (_, k) => cx(rad * Math.cos(2 * PI * k / n + 0.4), rad * Math.sin(2 * PI * k / n + 0.4)));
+    for (let it = 0; it < 300; it++) {
+      let maxStep = 0;
+      for (let k = 0; k < n; k++) {
+        const ratio = cdiv(P(z[k]), dP(z[k])); let s = cx(0);
+        for (let j = 0; j < n; j++) if (j !== k) s = cadd(s, cdiv(cx(1), csub(z[k], z[j])));
+        const step = cdiv(ratio, csub(cx(1), cmul(ratio, s)));
+        if (isFinite(step.re) && isFinite(step.im)) { z[k] = csub(z[k], step); maxStep = Math.max(maxStep, cabs(step) / Math.max(cabs(z[k]), 1)); }
+      }
+      if (maxStep < 1e-14) break;
+    }
+    for (const r of z) roots.push(Math.abs(r.im) < 1e-9 ? cx(r.re, 0) : r);
+  }
+  for (let i = 0; i < atOrigin; i++) roots.push(cx(0, 0));
+  return roots;
+}
+
+/* ---------------- analysis ---------------- */
+function evalPoly(c, cw, sw) { // sum c_k e^{-jwk} by Horner; returns [re, im]
+  let re = 0, im = 0;
+  for (let k = c.length - 1; k >= 0; k--) { const nr = re * cw + im * sw + c[k]; const ni = im * cw - re * sw; re = nr; im = ni; }
+  return [re, im];
+}
+function freqz(b, a, n, fs, gain = 1) {
+  const f = new Float64Array(n), re = new Float64Array(n), im = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const w = PI * i / (n - 1), cw = Math.cos(w), sw = Math.sin(w);
+    const N = evalPoly(b, cw, sw), D = a ? evalPoly(a, cw, sw) : [1, 0]; const d = D[0] * D[0] + D[1] * D[1];
+    f[i] = w / PI * fs / 2; re[i] = gain * (N[0] * D[0] + N[1] * D[1]) / d; im[i] = gain * (N[1] * D[0] - N[0] * D[1]) / d;
+  }
+  return mkResp(f, re, im);
+}
+function sosFreqz(sos, n, fs, gain = 1) {
+  const f = new Float64Array(n), re = new Float64Array(n), im = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const w = PI * i / (n - 1), cw = Math.cos(w), sw = Math.sin(w); let hr = 1, hi = 0;
+    for (const s of sos) {
+      const N = evalPoly(s.slice(0, 3), cw, sw), D = evalPoly(s.slice(3), cw, sw); const d = D[0] * D[0] + D[1] * D[1];
+      const qr = (N[0] * D[0] + N[1] * D[1]) / d, qi = (N[1] * D[0] - N[0] * D[1]) / d;
+      const tr = hr * qr - hi * qi; hi = hr * qi + hi * qr; hr = tr;
+    }
+    f[i] = w / PI * fs / 2; re[i] = gain * hr; im[i] = gain * hi;
+  }
+  return mkResp(f, re, im);
+}
+function mkResp(f, re, im) {
+  const n = f.length, mag = new Float64Array(n), db = new Float64Array(n), ph = new Float64Array(n);
+  for (let i = 0; i < n; i++) { mag[i] = Math.hypot(re[i], im[i]); db[i] = 20 * Math.log10(Math.max(mag[i], 1e-12)); ph[i] = Math.atan2(im[i], re[i]); }
+  const un = new Float64Array(n); let off = 0; un[0] = ph[0];
+  for (let i = 1; i < n; i++) { let d = ph[i] - ph[i - 1]; if (d > PI) off -= 2 * PI * Math.round(d / (2 * PI)); else if (d < -PI) off -= 2 * PI * Math.round(d / (2 * PI)); un[i] = ph[i] + off; }
+  return { f, re, im, mag, db, phase: un };
+}
+function groupDelay(b, a, n, fs) {
+  const f = new Float64Array(n), g = new Float64Array(n);
+  const tau = (c, cw, sw) => { const kc = c.map((v, k) => v * k); const N = evalPoly(kc, cw, sw), D = evalPoly(c, cw, sw); const d = D[0] * D[0] + D[1] * D[1]; return d < 1e-20 ? NaN : (N[0] * D[0] + N[1] * D[1]) / d; };
+  for (let i = 0; i < n; i++) { const w = PI * i / (n - 1), cw = Math.cos(w), sw = Math.sin(w); f[i] = w / PI * fs / 2; g[i] = tau(b, cw, sw) - (a ? tau(a, cw, sw) : 0); }
+  return { f, gd: g };
+}
+function sosGroupDelay(sos, n, fs) {
+  const f = new Float64Array(n), g = new Float64Array(n);
+  const tau = (c, cw, sw) => { const kc = c.map((v, k) => v * k); const N = evalPoly(kc, cw, sw), D = evalPoly(c, cw, sw); const d = D[0] * D[0] + D[1] * D[1]; return d < 1e-20 ? NaN : (N[0] * D[0] + N[1] * D[1]) / d; };
+  for (let i = 0; i < n; i++) { const w = PI * i / (n - 1), cw = Math.cos(w), sw = Math.sin(w); let s = 0; for (const q of sos) s += tau(q.slice(0, 3), cw, sw) - tau(q.slice(3), cw, sw); f[i] = w / PI * fs / 2; g[i] = s; }
+  return { f, gd: g };
+}
+
+/** Evaluate a filter spec against a magnitude response (dB). bands: [{lo,hi,type:'pass'|'stop'}] in Hz */
+function measure(resp, bands) {
+  let rip = 0, att = Infinity, hasP = false, hasS = false, pmax = -Infinity;
+  for (const bd of bands) {
+    let mn = Infinity, mx = -Infinity;
+    for (let i = 0; i < resp.f.length; i++) if (resp.f[i] >= bd.lo - 1e-9 && resp.f[i] <= bd.hi + 1e-9) { mn = Math.min(mn, resp.db[i]); mx = Math.max(mx, resp.db[i]); }
+    if (!isFinite(mn)) continue;
+    if (bd.type === 'pass') { hasP = true; rip = Math.max(rip, mx - mn); pmax = Math.max(pmax, mx); } else { hasS = true; att = Math.min(att, -mx); }
+  }
+  return { ripple: hasP ? rip : NaN, atten: hasS ? att : NaN, passMax: hasP ? pmax : NaN };
+}
+
+/* ---------------- fixed-point quantization ---------------- */
+function qFormat(intBits, fracBits) { return { intBits, fracBits, word: 1 + intBits + fracBits, lsb: Math.pow(2, -fracBits) }; }
+function autoFormat(maxAbs, word) { const m = maxAbs < 1 ? 0 : Math.floor(Math.log2(maxAbs)) + 1; return qFormat(m, word - 1 - m); }
+function toInt(x, fmt, rounding = 'nearest') {
+  const s = x * Math.pow(2, fmt.fracBits), lo = -Math.pow(2, fmt.word - 1), hi = Math.pow(2, fmt.word - 1) - 1;
+  const q = rounding === 'nearest' ? Math.floor(s + 0.5) : rounding === 'floor' ? Math.floor(s) : Math.trunc(s);
+  return Math.min(hi, Math.max(lo, q));
+}
+const quantize = (x, fmt, rounding) => toInt(x, fmt, rounding) * fmt.lsb;
+const maxAbs = a => a.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+
+function quantizeFir(h, word, rounding) {
+  const fmt = autoFormat(maxAbs(Array.from(h)), word); const hq = Array.from(h, v => quantize(v, fmt, rounding));
+  let err = 0; h.forEach((v, i) => { err = Math.max(err, Math.abs(hq[i] - v)); });
+  return { fmt, hq, maxErr: err };
+}
+/** Peak-scale a biquad cascade (python: scale_sos). H = gain * prod(H_scaled). */
+function scaleSos(sos, n = 1024) {
+  const k = sos[0][0]; let gain = k; const out = [];
+  sos.forEach((s0, i) => {
+    const s = s0.slice(); if (i === 0) { s[0] /= k; s[1] /= k; s[2] /= k; }
+    let pk = 0;
+    for (let q = 0; q < n; q++) { const w = PI * q / (n - 1), cw = Math.cos(w), sw = Math.sin(w); const N = evalPoly(s.slice(0, 3), cw, sw), Dd = evalPoly(s.slice(3), cw, sw); pk = Math.max(pk, Math.hypot(N[0], N[1]) / Math.hypot(Dd[0], Dd[1])); }
+    gain *= pk; out.push([s[0] / pk, s[1] / pk, s[2] / pk, s[3], s[4], s[5]]);
+  });
+  return { sos: out, gain };
+}
+function quantizeSos(sos, word, rounding) {
+  const sc = scaleSos(sos), idx = [0, 1, 2, 4, 5]; const fmt = autoFormat(Math.max(...sc.sos.flatMap(s => idx.map(i => Math.abs(s[i])))), word);
+  const sq = sc.sos.map(s => { const r = s.slice(); idx.forEach(i => { r[i] = quantize(s[i], fmt, rounding); }); return r; });
+  let err = 0; sc.sos.forEach((s, k) => idx.forEach(i => { err = Math.max(err, Math.abs(sq[k][i] - s[i])); }));
+  return { fmt, sq, scaled: sc.sos, gain: sc.gain, maxErr: err };
+}
+function quantizeDirect(b, a, word, rounding) {
+  const gain = maxAbs(b), bs = b.map(v => v / gain), fmt = autoFormat(Math.max(maxAbs(bs), maxAbs(a)), word);
+  const bq = bs.map(v => quantize(v, fmt, rounding)), aq = a.map(v => quantize(v, fmt, rounding)); aq[0] = 1;
+  const poles = polyRoots(aq); const rad = poles.length ? Math.max(...poles.map(cabs)) : 0;
+  let err = 0; bs.forEach((v, i) => { err = Math.max(err, Math.abs(bq[i] - v)); }); a.forEach((v, i) => { err = Math.max(err, Math.abs(aq[i] - v)); });
+  return { fmt, bq, aq, gain, poles, maxRadius: rad, stable: rad < 1, maxErr: err };
+}
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function testSignal(n, sigma, seed = 7) {
+  const r = mulberry32(seed), x = new Float64Array(n);
+  for (let i = 0; i < n; i += 2) { const u = Math.max(r(), 1e-12), v = r(); const m = Math.sqrt(-2 * Math.log(u)) * sigma; x[i] = Math.max(-0.99, Math.min(0.99, m * Math.cos(2 * PI * v))); if (i + 1 < n) x[i + 1] = Math.max(-0.99, Math.min(0.99, m * Math.sin(2 * PI * v))); }
+  return x;
+}
+function firFixedSim(h, x, coefFmt, sigFmt, rounding) {
+  const hi = Array.from(h, v => toInt(v, coefFmt, rounding)), xi = Array.from(x, v => toInt(v, sigFmt, 'nearest'));
+  const sh = coefFmt.fracBits, lo = -Math.pow(2, sigFmt.word - 1), hiV = Math.pow(2, sigFmt.word - 1) - 1, den = Math.pow(2, sh);
+  const n = x.length, y = new Float64Array(n), yq = new Float64Array(n), yi = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    let acc = 0, accF = 0, accI = 0;
+    for (let k = 0; k < hi.length && k <= i; k++) { acc += hi[k] * xi[i - k]; accF += h[k] * x[i - k]; }
+    const r = Math.min(hiV, Math.max(lo, Math.floor(acc / den + 0.5)));
+    y[i] = r * sigFmt.lsb; yq[i] = acc / den * sigFmt.lsb; yi[i] = accF;
+  }
+  return { y, yq, yIdeal: yi };
+}
+function sosFixedSim(sos, x, coefFmt, sigFmt, rounding) {
+  const sh = coefFmt.fracBits, den = Math.pow(2, sh), lo = -Math.pow(2, sigFmt.word - 1), hiV = Math.pow(2, sigFmt.word - 1) - 1;
+  let cur = Array.from(x, v => toInt(v, sigFmt, 'nearest')); const xq = cur.map(v => v * sigFmt.lsb);
+  let ref = Array.from(xq); // float cascade with quantized coefficients and quantized input
+  let idealRef = Array.from(x);
+  for (const s of sos) {
+    const [b0, b1, b2, a1, a2] = [0, 1, 2, 4, 5].map(i => toInt(s[i], coefFmt, rounding)); const cf = [0, 1, 2, 4, 5].map(i => quantize(s[i], coefFmt, rounding));
+    let x1 = 0, x2 = 0, y1 = 0, y2 = 0; const out = new Array(cur.length);
+    for (let i = 0; i < cur.length; i++) { const v = cur[i]; const acc = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2; const y = Math.min(hiV, Math.max(lo, Math.floor(acc / den + 0.5))); x2 = x1; x1 = v; y2 = y1; y1 = y; out[i] = y; }
+    cur = out;
+    ref = lfilter(cf[0], cf[1], cf[2], cf[3], cf[4], ref);
+    idealRef = lfilter(s[0], s[1], s[2], s[4], s[5], idealRef);
+  }
+  return { y: Float64Array.from(cur, v => v * sigFmt.lsb), yq: Float64Array.from(ref), yIdeal: Float64Array.from(idealRef) };
+}
+function lfilter(b0, b1, b2, a1, a2, x) { let x1 = 0, x2 = 0, y1 = 0, y2 = 0; return x.map(v => { const y = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = v; y2 = y1; y1 = y; return y; }); }
+const variance = (a, b, skip = 0) => { let s = 0, n = 0; for (let i = skip; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; n++; } return s / n; };
+const power = (a, skip = 0) => { let s = 0, n = 0; for (let i = skip; i < a.length; i++) { s += a[i] * a[i]; n++; } return s / n; };
+
+function firNoiseTheory(h, sigFmt, inputQuantized = false) { const d2 = sigFmt.lsb * sigFmt.lsb / 12; let e = 0; for (const v of h) e += v * v; return d2 * (1 + (inputQuantized ? e : 0)); }
+function chainEnergy(num, den, n = 1 << 14) {
+  let s = 0;
+  for (let i = 0; i < n; i++) {
+    const w = 2 * PI * i / n, cw = Math.cos(w), sw = Math.sin(w); let hr = 1, hi = 0;
+    for (const c of num) { const v = evalPoly(c, cw, sw); const t = hr * v[0] - hi * v[1]; hi = hr * v[1] + hi * v[0]; hr = t; }
+    for (const c of den) { const v = evalPoly(c, cw, sw); const d = v[0] * v[0] + v[1] * v[1]; const qr = v[0] / d, qi = -v[1] / d; const t = hr * qr - hi * qi; hi = hr * qi + hi * qr; hr = t; }
+    s += hr * hr + hi * hi;
+  }
+  return s / n;
+}
+function sosNoiseTheory(sos, sigFmt) {
+  const d2 = sigFmt.lsb * sigFmt.lsb / 12; let total = 0;
+  for (let k = 0; k < sos.length; k++) { const rest = sos.slice(k + 1); total += d2 * chainEnergy(rest.map(s => s.slice(0, 3)), [sos[k].slice(3)].concat(rest.map(s => s.slice(3)))); }
+  return total;
+}
+
+root.DSP = { windowFn, kaiserParams, firWindow, remez, designIIR, minOrder, zpk2sos, sos2tf, polyRoots, freqz, sosFreqz, groupDelay, sosGroupDelay, measure,
+  qFormat, autoFormat, quantize, toInt, quantizeFir, scaleSos, quantizeSos, quantizeDirect, testSignal, firFixedSim, sosFixedSim, variance, power, firNoiseTheory, sosNoiseTheory, cabs, cx };
+if (typeof module !== 'undefined') module.exports = root.DSP;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>/* filterlab UI. Depends on window.DSP (dsp.js). */
+(() => {
+'use strict';
+const D = window.DSP;
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/* ================= state ================= */
+const METHODS = {
+  remez: { name: 'Equiripple FIR', note: 'Parks–McClellan: smallest filter for a given spec', kind: 'fir' },
+  window: { name: 'Windowed FIR', note: 'Ideal response times a window', kind: 'fir' },
+  butter: { name: 'Butterworth', note: 'IIR, flat passband, gentle roll-off', kind: 'iir' },
+  cheby1: { name: 'Chebyshev I', note: 'IIR, ripple in the passband', kind: 'iir' },
+  cheby2: { name: 'Chebyshev II', note: 'IIR, ripple in the stopband', kind: 'iir' },
+};
+const BTYPES = { lowpass: 'Low-pass', highpass: 'High-pass', bandpass: 'Band-pass', bandstop: 'Band-stop' };
+const LABELS = {
+  lowpass: ['Passband ends', 'Stopband starts'], highpass: ['Stopband ends', 'Passband starts'],
+  bandpass: ['Lower stopband ends', 'Passband starts', 'Passband ends', 'Upper stopband starts'],
+  bandstop: ['Lower passband ends', 'Stopband starts', 'Stopband ends', 'Upper passband starts'],
+};
+const ROLES = { lowpass: 'PS', highpass: 'SP', bandpass: 'SPPS', bandstop: 'PSSP' };
+const WINDOWS = { kaiser: 'Kaiser (set by attenuation)', blackman: 'Blackman', hamming: 'Hamming', hann: 'Hann', rect: 'Rectangular' };
+const WIN_FACTOR = { rect: 0.9, hann: 3.1, hamming: 3.3, blackman: 5.5 };
+const WIN_CAP = { rect: 21, hann: 44, hamming: 53, blackman: 74 };
+const defaultEdges = (bt, fs) => ({ lowpass: [0.125, 0.1875], highpass: [0.125, 0.1875], bandpass: [0.0625, 0.125, 0.25, 0.3125], bandstop: [0.0625, 0.125, 0.25, 0.3125] }[bt].map(r => Math.round(r * fs)));
+
+const state = {
+  method: 'remez', btype: 'lowpass', fs: 8000, edges: defaultEdges('lowpass', 8000), rp: 1, rs: 60, win: 'kaiser',
+  orderMode: 'auto', order: 41, tab: 'response', zoom: 'full', phase: 'phase',
+  q: { coef: 12, sig: 16, round: 'nearest', struct: 'sos' },
+};
+let drawn = false, current = null, focusKey = null, renderQueued = false, fastMode = false;
+
+/* ================= spec helpers ================= */
+function bandsOf(bt, e, nyq) {
+  const B = (lo, hi, type) => ({ lo, hi, type });
+  if (bt === 'lowpass') return [B(0, e[0], 'pass'), B(e[1], nyq, 'stop')];
+  if (bt === 'highpass') return [B(0, e[0], 'stop'), B(e[1], nyq, 'pass')];
+  if (bt === 'bandpass') return [B(0, e[0], 'stop'), B(e[1], e[2], 'pass'), B(e[3], nyq, 'stop')];
+  return [B(0, e[0], 'pass'), B(e[1], e[2], 'stop'), B(e[3], nyq, 'pass')];
+}
+function splitEdges(bt, e) {
+  if (bt === 'lowpass') return { pass: [e[0]], stop: [e[1]] };
+  if (bt === 'highpass') return { stop: [e[0]], pass: [e[1]] };
+  if (bt === 'bandpass') return { stop: [e[0], e[3]], pass: [e[1], e[2]] };
+  return { pass: [e[0], e[3]], stop: [e[1], e[2]] };
+}
+const transWidth = (bt, e) => bt === 'lowpass' || bt === 'highpass' ? e[1] - e[0] : Math.min(e[1] - e[0], e[3] - e[2]);
+
+/* ================= design ================= */
+const memo = new Map();
+function designFilter(st, fast) {
+  const key = JSON.stringify([st.method, st.btype, st.fs, st.edges, st.rp, st.rs, st.win, st.orderMode, st.orderMode === 'manual' ? st.order : 0, fast]);
+  if (memo.has(key)) return memo.get(key);
+  const out = buildDesign(st, fast);
+  memo.set(key, out); if (memo.size > 40) memo.delete(memo.keys().next().value);
+  return out;
+}
+function buildDesign(st, fast) {
+  const nyq = st.fs / 2, e = st.edges, bands = bandsOf(st.btype, e, nyq), M = METHODS[st.method], notes = [];
+  const dp = (Math.pow(10, st.rp / 20) - 1) / (Math.pow(10, st.rp / 20) + 1), ds = Math.pow(10, -st.rs / 20);
+  const sp = splitEdges(st.btype, e), df = transWidth(st.btype, e) / st.fs;
+  const out = { method: st.method, kind: M.kind, bands, notes, nyq };
+  if (st.method === 'remez') {
+    const flat = [0, ...e, nyq];
+    let desired, wts;
+    if (st.btype === 'lowpass') { desired = [1, 0]; wts = [1 / dp, 1 / ds]; }
+    else if (st.btype === 'highpass') { desired = [0, 1]; wts = [1 / ds, 1 / dp]; }
+    else if (st.btype === 'bandpass') { desired = [0, 1, 0]; wts = [1 / ds, 1 / dp, 1 / ds]; }
+    else { desired = [1, 0, 1]; wts = [1 / dp, 1 / ds, 1 / dp]; }
+    const run = n => { const r = D.remez(n, flat, desired, wts, st.fs); const resp = D.freqz(r.h, null, 2048, st.fs); return { r, resp, m: D.measure(resp, bands) }; };
+    const ok = m => m.ripple <= st.rp * 1.0005 + 1e-6 && m.atten >= st.rs - 0.01;
+    let est = Math.ceil((-10 * Math.log10(dp * ds) - 13) / (14.6 * df)) + 1; est = clamp(est | 1, 7, 801);
+    let n, res;
+    if (st.orderMode === 'manual') { n = clamp(st.order | 1, 5, 801); res = run(n); }
+    else if (fast) { n = est; res = run(n); }
+    else {
+      n = est; res = run(n);
+      if (ok(res.m)) { for (let i = 0; i < 12 && n > 7; i++) { const t = run(n - 2); if (ok(t.m)) { n -= 2; res = t; } else break; } }
+      else { for (let i = 0; i < 70 && n < 801; i++) { n += 2; res = run(n); if (ok(res.m)) break; } if (!ok(res.m)) notes.push('No filter up to 801 taps meets this spec. Widen the transition band or relax the targets.'); }
+    }
+    Object.assign(out, { h: Array.from(res.r.h), taps: n, resp: res.resp, title: `Equiripple FIR, ${n} taps`, size: `${n} taps` });
+  } else if (st.method === 'window') {
+    const cuts = st.btype === 'lowpass' || st.btype === 'highpass' ? [(e[0] + e[1]) / 2] : [(e[0] + e[1]) / 2, (e[2] + e[3]) / 2];
+    let n, beta = 8.6; const tw = transWidth(st.btype, e);
+    if (st.win === 'kaiser') { const kp = D.kaiserParams(st.rs, tw, st.fs); n = kp.numtaps; beta = kp.beta; } else n = Math.ceil(WIN_FACTOR[st.win] * st.fs / tw) | 1;
+    n = clamp(st.orderMode === 'manual' ? st.order : n, 5, 1201);
+    const build = nn => { const hh = D.firWindow(nn, cuts, st.btype, st.win, st.fs, beta); const rr = D.freqz(hh, null, 2048, st.fs); return { hh, rr, mm: D.measure(rr, bands) }; };
+    const meets = mm => mm.ripple <= st.rp * 1.0005 + 1e-6 && mm.atten >= st.rs - 0.01;
+    let t = build(n);
+    // Kaiser's formula is an estimate: in auto mode, add taps until the measured response meets the spec
+    const reachable = st.win === 'kaiser' || st.rs <= WIN_CAP[st.win];
+    if (st.orderMode === 'auto' && !fast && reachable) for (let i = 0; i < 40 && !meets(t.mm); i++) { n += 2; t = build(n); }
+    const h = t.hh, nn = h.length, resp = t.rr;
+    Object.assign(out, { h: Array.from(h), taps: nn, resp, beta, title: `${WINDOWS[st.win].split(' (')[0]} window FIR, ${nn} taps`, size: `${nn} taps` });
+    if (st.win !== 'kaiser' && st.rs > WIN_CAP[st.win]) notes.push(`A ${WINDOWS[st.win]} window can't give more than about ${WIN_CAP[st.win]} dB of stopband attenuation, however many taps you use. Choose Kaiser or Blackman for ${st.rs} dB.`);
+  } else {
+    const pe = sp.pass, se = sp.stop; let n;
+    if (st.orderMode === 'manual') n = clamp(st.order, 1, 24);
+    else { n = D.minOrder(st.method, st.btype, pe, se, st.rp, st.rs, st.fs); if (n > 24) { notes.push(`Minimum order is ${n}; capped at 24. Widen the transition band for a practical IIR.`); n = 24; } }
+    const edges = st.method === 'cheby2' ? se : pe;
+    const scale = st.method === 'butter' ? Math.pow(Math.pow(10, st.rp / 10) - 1, -1 / (2 * n)) : 1;
+    const d = D.designIIR(st.method, st.btype, n, edges, st.fs, st.rp, st.rs, scale);
+    const resp = D.sosFreqz(d.sos, 2048, st.fs);
+    Object.assign(out, { sos: d.sos, b: d.b, a: d.a, zeros: d.z, poles: d.p, order: n, resp, title: `${M.name}, order ${d.a.length - 1}`, size: `order ${d.a.length - 1}, ${d.sos.length} biquad${d.sos.length > 1 ? 's' : ''}` });
+  }
+  if (out.kind === 'fir') {
+    out.zeros = D.polyRoots(out.h); out.poleOrigin = out.h.length - 1; out.poles = [];
+    out.gd = D.groupDelay(out.h, null, 1024, st.fs);
+  } else {
+    out.poleOrigin = 0; out.gd = D.sosGroupDelay(out.sos, 1024, st.fs);
+  }
+  out.m = D.measure(out.resp, bands);
+  out.passRipple = out.m.ripple <= st.rp * 1.0005 + 1e-6; out.stopOk = out.m.atten >= st.rs - 0.01;
+  return out;
+}
+
+/* ================= charts ================= */
+function niceTicks(lo, hi, target) {
+  const raw = (hi - lo) / target, mag = Math.pow(10, Math.floor(Math.log10(raw))), nn = raw / mag;
+  const step = (nn < 1.5 ? 1 : nn < 3 ? 2 : nn < 7 ? 5 : 10) * mag, t = [];
+  for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + 1e-9; v += step) t.push(+v.toFixed(10));
+  return t;
+}
+const fmtHz = f => Math.abs(f) >= 1000 ? (f / 1000).toFixed(Math.abs(f) % 1000 === 0 ? 0 : 2).replace(/0$/, '') + 'k' : String(Math.round(f * 10) / 10);
+const fmtN = (v, d = 2) => Number.isFinite(v) ? (Math.round(v * Math.pow(10, d)) / Math.pow(10, d)).toString() : '—';
+let uid = 0;
+const SERIES_COLORS = ['var(--s1)', 'var(--s2)', 'var(--ink-3)'];
+
+function lineChart(el, cfg) {
+  const W = Math.max(el.clientWidth || 520, 240), H = cfg.height || 260;
+  const m = { l: cfg.ml || 62, r: 14, t: 22, b: cfg.xLabel ? 40 : 24 };
+  const [x0, x1] = cfg.xd, [y0, y1] = cfg.yd, iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const sx = x => m.l + (x - x0) / (x1 - x0) * iw, sy = y => m.t + (1 - (y - y0) / (y1 - y0)) * ih, id = 'c' + (++uid);
+  const xt = cfg.xticks || niceTicks(x0, x1, Math.max(3, Math.floor(iw / 80))), yt = niceTicks(y0, y1, Math.max(3, Math.floor(ih / 44)));
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(cfg.label)}"><defs><clipPath id="${id}"><rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}"/></clipPath></defs>`;
+  s += '<g class="grid">' + yt.map(v => `<line x1="${m.l}" x2="${W - m.r}" y1="${sy(v)}" y2="${sy(v)}"/>`).join('') + xt.map(v => `<line y1="${m.t}" y2="${H - m.b}" x1="${sx(v)}" x2="${sx(v)}"/>`).join('') + '</g>';
+  s += `<g clip-path="url(#${id})">`;
+  for (const sh of cfg.shades || []) { const ya = sy(clamp(sh.y0, y0, y1)), yb = sy(clamp(sh.y1, y0, y1)); s += `<rect class="shade" x="${sx(sh.x0)}" y="${Math.min(ya, yb)}" width="${Math.max(sx(sh.x1) - sx(sh.x0), 0)}" height="${Math.abs(yb - ya)}"/><line class="shade-edge" x1="${sx(sh.x0)}" x2="${sx(sh.x1)}" y1="${sy(sh.edge)}" y2="${sy(sh.edge)}"/>`; }
+  for (const hl of cfg.hlines || []) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${sy(hl.y)}" y2="${sy(hl.y)}" stroke="var(--ink-3)" stroke-dasharray="2 4"/>`;
+  cfg.series.forEach((se, k) => {
+    const col = se.color || SERIES_COLORS[k];
+    if (se.type === 'stem') {
+      s += se.x.map((xv, i) => `<line x1="${sx(xv)}" x2="${sx(xv)}" y1="${sy(0)}" y2="${sy(se.y[i])}" stroke="${col}" stroke-width="1.5"/>`).join('');
+      if (se.x.length <= 140) s += se.x.map((xv, i) => `<circle cx="${sx(xv)}" cy="${sy(se.y[i])}" r="3" fill="${col}" stroke="var(--panel)" stroke-width="1.5"/>`).join('');
+    } else {
+      let d = '', pen = false;
+      for (let i = 0; i < se.x.length; i++) { const yv = se.y[i]; if (!Number.isFinite(yv)) { pen = false; continue; } d += (pen ? 'L' : 'M') + sx(se.x[i]).toFixed(1) + ' ' + sy(yv).toFixed(1); pen = true; }
+      s += `<path class="trace${se.draw && !drawn ? ' draw' : ''}" d="${d}" stroke="${col}" ${se.dash ? 'stroke-dasharray="6 4"' : ''}/>`;
+    }
+  });
+  s += '</g>';
+  s += `<rect class="frame" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}"/>`;
+  s += yt.map(v => `<text x="${m.l - 8}" y="${sy(v) + 4}" text-anchor="end">${(cfg.fy || fmtN)(v)}</text>`).join('') + xt.map(v => `<text x="${sx(v)}" y="${H - m.b + 15}" text-anchor="middle">${(cfg.fx || fmtHz)(v)}</text>`).join('');
+  if (cfg.xLabel) s += `<text class="axis-title" x="${m.l + iw / 2}" y="${H - 4}" text-anchor="middle">${esc(cfg.xLabel)}</text>`;
+  if (cfg.yLabel) s += `<text class="axis-title" transform="translate(12 ${m.t + ih / 2}) rotate(-90)" text-anchor="middle">${esc(cfg.yLabel)}</text>`;
+  for (const hd of cfg.handles || []) {
+    const x = sx(hd.x), w = 22;
+    s += `<g class="handle${focusKey === hd.key ? ' active' : ''}" data-key="${hd.key}" tabindex="0" role="slider" aria-label="${esc(hd.title)}" aria-valuenow="${Math.round(hd.x)}" aria-valuemin="0" aria-valuemax="${Math.round(x1)}"><line class="edge" x1="${x}" x2="${x}" y1="${m.t}" y2="${H - m.b}"/><rect x="${x - 12}" y="${m.t}" width="24" height="${ih}" fill="transparent"/><rect class="tab" x="${x - w / 2}" y="${m.t - 18}" width="${w}" height="16" rx="4"/><text class="tabtxt" x="${x}" y="${m.t - 6}" text-anchor="middle">${hd.label}</text><title>${esc(hd.title)}</title></g>`;
+  }
+  s += `<g class="hover" visibility="hidden"><line class="xh" y1="${m.t}" y2="${H - m.b}" stroke="var(--ink-3)"/>${cfg.series.map((se, k) => `<circle r="4" fill="${se.color || SERIES_COLORS[k]}" stroke="var(--panel)" stroke-width="2"/>`).join('')}</g>`;
+  s += `<rect class="hit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent" style="pointer-events:${cfg.handles ? 'none' : 'all'}"/></svg><div class="tip" hidden></div>`;
+  el.innerHTML = s;
+  const svg = el.firstElementChild, tip = el.lastElementChild, hover = $('.hover', el), hit = $('.hit', el);
+  const move = ev => {
+    const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) * (W / r.width), xv = x0 + (px - m.l) / iw * (x1 - x0);
+    if (xv < x0 || xv > x1) return leave();
+    const s0 = cfg.series[0]; let lo = 0, hi = s0.x.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (s0.x[mid] < xv) lo = mid; else hi = mid; }
+    const i = Math.abs(s0.x[lo] - xv) <= Math.abs(s0.x[hi] - xv) ? lo : hi;
+    hover.setAttribute('visibility', 'visible'); const xs = sx(s0.x[i]);
+    $('.xh', el).setAttribute('x1', xs); $('.xh', el).setAttribute('x2', xs);
+    $$('circle', hover).forEach((c, k) => { const yv = cfg.series[k].y[i]; c.setAttribute('cx', sx(cfg.series[k].x[i] ?? s0.x[i])); c.setAttribute('cy', Number.isFinite(yv) ? sy(clamp(yv, y0, y1)) : -99); });
+    tip.innerHTML = cfg.tip(i); tip.hidden = false;
+    const tw = tip.offsetWidth; tip.style.left = clamp(xs * (r.width / W) + 12, 0, r.width - tw) + 'px'; tip.style.top = (m.t + 4) + 'px';
+  };
+  const leave = () => { hover.setAttribute('visibility', 'hidden'); tip.hidden = true; };
+  const area = cfg.handles ? svg : hit; area.addEventListener('pointermove', ev => { if (!ev.target.closest('.handle')) move(ev); else leave(); }); area.addEventListener('pointerleave', leave);
+  if (cfg.handles) {
+    const toX = ev => { const live = document.getElementById(el.id) || el, r = $('svg', live).getBoundingClientRect(); return x0 + ((ev.clientX - r.left) * (W / r.width) - m.l) / iw * (x1 - x0); };
+    $$('.handle', el).forEach(g => {
+      const key = +g.dataset.key;
+      g.addEventListener('pointerdown', ev => {
+        ev.preventDefault(); focusKey = key; g.classList.add('active');
+        const mv = e2 => cfg.onDrag(key, toX(e2), false), up = e2 => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cfg.onDrag(key, toX(e2), true); };
+        window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+      });
+      g.addEventListener('keydown', ev => {
+        const k = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 }[ev.key]; if (!k) return;
+        ev.preventDefault(); focusKey = key; const hd = cfg.handles.find(h => h.key === key); cfg.onDrag(key, hd.x + k * (ev.shiftKey ? 10 : 1) * (x1 - x0) / 400, true);
+      });
+    });
+    if (focusKey !== null) { const g = $(`.handle[data-key="${focusKey}"]`, el); if (g && document.activeElement !== g && el.dataset.keepfocus) g.focus({ preventScroll: true }); }
+  }
+  const dp = $('.trace.draw', el); if (dp) dp.style.setProperty('--len', Math.ceil(dp.getTotalLength()));
+}
+
+function pzChart(el, cfg) {
+  const Wd = Math.min(Math.max(el.clientWidth || 300, 220), 420), H = Wd;
+  let R = 1.4; for (const z of [...cfg.zeros, ...cfg.poles, ...(cfg.qZeros || []), ...(cfg.qPoles || [])]) R = Math.max(R, Math.min(D.cabs(z) * 1.1, 6));
+  R = R > 1.5 ? Math.ceil(R * 2) / 2 : 1.4; const c = Wd / 2, k = (Wd / 2 - 24) / R, X = x => c + x * k, Y = y => c - y * k;
+  let s = `<svg viewBox="0 0 ${Wd} ${H}" width="${Wd}" height="${H}" role="img" aria-label="Pole-zero plot"><g class="grid">`;
+  [0.5, 1.5].filter(r => r < R).forEach(r => { s += `<circle cx="${c}" cy="${c}" r="${r * k}" fill="none" stroke="var(--grid)"/>`; });
+  s += `<line x1="${24}" x2="${Wd - 24}" y1="${c}" y2="${c}"/><line y1="${24}" y2="${H - 24}" x1="${c}" x2="${c}"/></g><circle cx="${c}" cy="${c}" r="${k}" fill="none" stroke="var(--ink-3)" stroke-width="1.5"/>`;
+  s += `<text x="${X(1) + 4}" y="${c + 14}">1</text><text x="${X(-1) - 4}" y="${c + 14}" text-anchor="end">−1</text><text x="${c + 5}" y="${Y(1) - 4}">j</text><text x="${Wd - 8}" y="${c - 6}" text-anchor="end">Re</text><text x="${c + 6}" y="30">Im</text>`;
+  const groups = (arr, extraOrigin) => {
+    const g = new Map(); arr.forEach(z => { const kk = Math.round(z.re * 1e4) + ',' + Math.round(z.im * 1e4); const e = g.get(kk) || { z, n: 0 }; e.n++; g.set(kk, e); });
+    if (extraOrigin) { const e = g.get('0,0') || { z: { re: 0, im: 0 }, n: 0 }; e.n += extraOrigin; g.set('0,0', e); }
+    return [...g.values()];
+  };
+  const marks = [];
+  const draw = (items, type, col, ghost) => items.forEach(({ z, n }) => {
+    const x = X(z.re), y = Y(z.im); marks.push({ x, y, z, n, type, ghost });
+    const out = ghost && D.cabs(z) >= 1 && type === 'pole';
+    if (out) s += `<circle cx="${x}" cy="${y}" r="10" fill="none" stroke="var(--bad)" stroke-width="2"/>`;
+    if (type === 'zero') s += `<circle cx="${x}" cy="${y}" r="${ghost ? 4 : 5}" fill="${ghost ? 'none' : 'var(--panel)'}" stroke="${col}" stroke-width="2"/>`;
+    else s += `<path d="M${x - 5} ${y - 5}L${x + 5} ${y + 5}M${x + 5} ${y - 5}L${x - 5} ${y + 5}" stroke="${col}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+    if (n > 1) s += `<text x="${x + 8}" y="${y - 7}" style="fill:var(--ink);font-weight:600">${n}</text>`;
+  });
+  draw(groups(cfg.zeros, 0), 'zero', 'var(--s1)', false); draw(groups(cfg.poles, cfg.poleOrigin || 0), 'pole', 'var(--s1)', false);
+  if (cfg.qZeros) { draw(groups(cfg.qZeros, 0), 'zero', 'var(--s2)', true); draw(groups(cfg.qPoles, cfg.qPoleOrigin || 0), 'pole', 'var(--s2)', true); }
+  s += `</svg><div class="tip" hidden></div>`; el.innerHTML = s;
+  const svg = el.firstElementChild, tip = el.lastElementChild;
+  svg.addEventListener('pointermove', ev => {
+    const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) * (Wd / r.width), py = (ev.clientY - r.top) * (H / r.height);
+    let best = null, bd = 14; marks.forEach(mk => { const d = Math.hypot(mk.x - px, mk.y - py); if (d < bd) { bd = d; best = mk; } });
+    if (!best) { tip.hidden = true; return; }
+    const z = best.z, ang = Math.atan2(z.im, z.re) / (2 * Math.PI) * cfg.fs;
+    tip.innerHTML = `<b>${best.ghost ? 'Quantized ' : ''}${best.type}${best.n > 1 ? ' ×' + best.n : ''}</b><br>${fmtN(z.re, 4)} ${z.im < 0 ? '−' : '+'} ${fmtN(Math.abs(z.im), 4)}j<br>radius ${fmtN(D.cabs(z), 4)} · angle ${fmtN(Math.abs(ang), 0)} Hz`;
+    tip.hidden = false; tip.style.left = clamp(px * (r.width / Wd) + 12, 0, r.width - tip.offsetWidth) + 'px'; tip.style.top = clamp(py * (r.height / H) + 12, 0, r.height - 60) + 'px';
+  });
+  svg.addEventListener('pointerleave', () => { tip.hidden = true; });
+}
+
+const legend = items => `<div class="legend">${items.map(i => `<span><i class="${i.dash ? 'dash' : ''}" style="border-color:${i.color}"></i>${esc(i.label)}</span>`).join('')}</div>`;
+function tableDetails(headers, rows, label = 'Show data table') {
+  return `<details class="data"><summary>${label}</summary><div class="scroll"><table class="t"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`;
+}
+
+/* ================= views ================= */
+function magShades(st, d) {
+  const nyq = st.fs / 2, fir = d.kind === 'fir', up = fir ? st.rp / 2 : 0, lo = fir ? -st.rp / 2 : -st.rp, sh = [];
+  for (const b of d.bands) {
+    if (b.type === 'stop') sh.push({ x0: b.lo, x1: b.hi, y0: -st.rs, y1: 100, edge: -st.rs });
+    else { sh.push({ x0: b.lo, x1: b.hi, y0: -400, y1: lo, edge: lo }); if (fir) sh.push({ x0: b.lo, x1: b.hi, y0: up, y1: 400, edge: up }); }
+  }
+  return sh;
+}
+function yDomain(st) { return state.zoom === 'pass' ? [-Math.max(st.rp * 2.4, 0.6), Math.max(st.rp * 1.4, 0.4)] : [-Math.ceil((st.rs + 30) / 10) * 10, 5]; }
+const edgeHandles = (st, d) => st.edges.map((f, i) => ({ key: i, x: f, label: ROLES[st.btype][i], title: `${LABELS[st.btype][i]}: ${Math.round(f)} Hz` }));
+function onEdgeDrag(i, x, final) {
+  const gap = Math.max(state.fs / 800, 1), nyq = state.fs / 2, e = state.edges.slice();
+  e[i] = clamp(Math.round(x), (e[i - 1] ?? 0) + gap, (e[i + 1] ?? nyq) - gap); state.edges = e; syncControls(); fastMode = !final; scheduleRender();
+}
+
+function renderResponse(d) {
+  const st = state, v = $('#view');
+  const tools = (name, opts, cur) => `<div class="seg" role="group" aria-label="${name}">${opts.map(([k, l]) => `<button data-k="${name}" data-v="${k}" aria-pressed="${cur === k}">${l}</button>`).join('')}</div>`;
+  v.innerHTML = `<div class="grid2"><div class="col">
+    <div class="panel card"><div class="card-head"><h2>Magnitude</h2><div class="tools">Drag the edge tabs to reshape the filter ${tools('zoom', [['full', 'Full range'], ['pass', 'Passband']], st.zoom)}</div></div>
+      ${legend([{ label: 'Response', color: 'var(--s1)' }, { label: 'Spec limit (shaded = outside spec)', color: 'var(--shade-line)' }])}
+      <div class="chart" id="cMag" data-keepfocus="1"></div><div id="tMag"></div></div>
+    <div class="panel card"><div class="card-head"><h2>${st.phase === 'phase' ? 'Phase' : 'Group delay'}</h2><div class="tools">${tools('phase', [['phase', 'Phase'], ['gd', 'Group delay']], st.phase)}</div></div>
+      <div class="chart" id="cPh"></div></div></div>
+    <div class="col"><div class="panel card"><div class="card-head"><h2>Poles and zeros</h2></div><div class="legend"><span>○ Zero</span><span>× Pole</span></div><div class="chart" id="cPZ"></div><p class="hint">${d.kind === 'fir' ? `FIR: ${d.poleOrigin} poles sit at the origin, so it is always stable.` : 'All poles inside the unit circle means a stable filter.'}</p></div>
+    <div class="panel card"><div class="card-head"><h2>Spec check</h2></div>${scoreHtml(d)}</div></div></div>`;
+  $$('[data-k]', v).forEach(b => b.addEventListener('click', () => { state[b.dataset.k] = b.dataset.v; renderResponse(current); }));
+  const nyq = st.fs / 2, r = d.resp, fr = Array.from(r.f);
+  lineChart($('#cMag'), { label: 'Magnitude response in decibels', height: 300, xd: [0, nyq], yd: yDomain(st), yLabel: 'Gain (dB)', xLabel: 'Frequency (Hz)', series: [{ x: fr, y: Array.from(r.db), draw: true }],
+    shades: magShades(st, d), handles: edgeHandles(st, d), onDrag: onEdgeDrag, tip: i => `<b>${fmtN(r.f[i], 1)} Hz</b><br>${fmtN(r.db[i], 2)} dB` });
+  const phaseChart = () => {
+    if (st.phase === 'phase') { const y = Array.from(r.phase, p => p * 180 / Math.PI); lineChart($('#cPh'), { label: 'Phase response', height: 200, xd: [0, nyq], yd: padRange(y), yLabel: 'Phase (°)', xLabel: 'Frequency (Hz)', series: [{ x: fr, y }], tip: i => `<b>${fmtN(r.f[i], 1)} Hz</b><br>${fmtN(y[i], 1)}°` }); }
+    else { const g = Array.from(d.gd.gd), fg = Array.from(d.gd.f), fin = g.filter(Number.isFinite).sort((a, b) => a - b); const lo = fin[Math.floor(fin.length * 0.02)], hi = fin[Math.floor(fin.length * 0.98)]; lineChart($('#cPh'), { label: 'Group delay', height: 200, xd: [0, nyq], yd: padRange([lo, hi, 0]), yLabel: 'Delay (samples)', xLabel: 'Frequency (Hz)', series: [{ x: fg, y: g }], tip: i => `<b>${fmtN(fg[i], 1)} Hz</b><br>${fmtN(g[i], 2)} samples (${fmtN(g[i] / st.fs * 1000, 3)} ms)` }); }
+  };
+  phaseChart();
+  pzChart($('#cPZ'), { zeros: d.zeros, poles: d.poles, poleOrigin: d.poleOrigin, fs: st.fs });
+  const step = Math.max(1, Math.floor(fr.length / 32)); const rows = []; for (let i = 0; i < fr.length; i += step) rows.push([fmtN(r.f[i], 1), fmtN(r.db[i], 2), fmtN(r.phase[i] * 180 / Math.PI, 1)]);
+  $('#tMag').innerHTML = tableDetails(['Frequency (Hz)', 'Gain (dB)', 'Phase (°)'], rows);
+}
+function padRange(a) { const f = a.filter(Number.isFinite); let lo = Math.min(...f), hi = Math.max(...f); if (hi - lo < 1e-9) { lo -= 1; hi += 1; } const p = (hi - lo) * 0.08; return [lo - p, hi + p]; }
+
+function scoreHtml(d) {
+  const st = state, row = (ok, lab, val, sub) => `<div class="row"><span class="ic ${ok ? 'ok' : 'no'}" aria-hidden="true">${ok ? '✓' : '✕'}</span><span class="lab">${lab}</span><span class="val num">${val}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
+  const gdPass = (() => { const f = Array.from(d.gd.f), g = Array.from(d.gd.gd); let mn = Infinity, mx = -Infinity; d.bands.filter(b => b.type === 'pass').forEach(b => f.forEach((ff, i) => { if (ff >= b.lo && ff <= b.hi && Number.isFinite(g[i])) { mn = Math.min(mn, g[i]); mx = Math.max(mx, g[i]); } })); return [mn, mx]; })();
+  const gdTxt = d.kind === 'fir' ? `Constant delay of ${fmtN((d.taps - 1) / 2, 1)} samples (${fmtN((d.taps - 1) / 2 / st.fs * 1000, 2)} ms): linear phase.` : `Delay varies ${fmtN(gdPass[0], 1)} to ${fmtN(gdPass[1], 1)} samples across the passband.`;
+  return `<div class="score">
+    ${row(d.passRipple, 'Passband ripple', fmtN(d.m.ripple, 3) + ' dB', `Target ${st.rp} dB or less${d.passRipple ? '' : '. Over by ' + fmtN(d.m.ripple - st.rp, 3) + ' dB'}`)}
+    ${row(d.stopOk, 'Stopband attenuation', fmtN(d.m.atten, 1) + ' dB', `Target ${st.rs} dB or more${d.stopOk ? '' : '. Short by ' + fmtN(st.rs - d.m.atten, 1) + ' dB'}`)}
+    ${row(true, 'Size', d.size, gdTxt)}
+    ${d.notes.map(n => `<div class="banner">${esc(n)}</div>`).join('')}</div>`;
+}
+
+function listings(d) {
+  if (d.kind === 'fir') return { rows: d.h.map((v, n) => [n, v.toPrecision(10)]), head: ['n', 'h[n]'] };
+  return { rows: d.sos.map((s, k) => [k + 1, ...s.map(v => v.toFixed(10))]), head: ['Section', 'b0', 'b1', 'b2', 'a0', 'a1', 'a2'] };
+}
+function impulse(d, n) {
+  if (d.kind === 'fir') return Array.from({ length: Math.min(n, d.h.length) }, (_, i) => d.h[i]);
+  let x = new Array(n).fill(0); x[0] = 1;
+  for (const s of d.sos) { let x1 = 0, x2 = 0, y1 = 0, y2 = 0; x = x.map(v => { const y = s[0] * v + s[1] * x1 + s[2] * x2 - s[4] * y1 - s[5] * y2; x2 = x1; x1 = v; y2 = y1; y1 = y; return y; }); }
+  return x;
+}
+function renderTime(d) {
+  const st = state, v = $('#view'), n = d.kind === 'fir' ? Math.min(d.h.length, 400) : 200;
+  const h = impulse(d, n), idx = h.map((_, i) => i), stepR = []; h.reduce((a, b, i) => (stepR[i] = a + b), 0);
+  const L = listings(d);
+  v.innerHTML = `<div class="grid2"><div class="col">
+    <div class="panel card"><div class="card-head"><h2>Impulse response</h2></div><div class="chart" id="cImp"></div></div>
+    <div class="panel card"><div class="card-head"><h2>Step response</h2></div><div class="chart" id="cStep"></div></div></div>
+    <div class="col"><div class="panel card"><div class="card-head"><h2>Coefficients</h2><div class="tools"><button class="btn" id="cpPy">Python</button><button class="btn" id="cpC">C, floating</button><button class="btn" id="cpQ">C, fixed-point</button></div></div>
+      <div class="scroll"><table class="t mono"><thead><tr>${L.head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${L.rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      <p class="hint">Fixed-point export uses the word length chosen on the Quantization tab (${st.q.coef} bits).</p></div></div></div>`;
+  lineChart($('#cImp'), { label: 'Impulse response', height: 240, xd: [-0.5, n - 0.5], yd: padRange([...h, 0]), xticks: undefined, fx: v => Math.round(v), fy: v => fmtN(v, 3), xLabel: 'Sample n', series: [{ type: 'stem', x: idx, y: h }], tip: i => `<b>n = ${i}</b><br>${h[i].toPrecision(6)}` });
+  const stp = stepR; lineChart($('#cStep'), { label: 'Step response', height: 220, xd: [0, n - 1], yd: padRange([...stp, 0]), fx: v => Math.round(v), fy: v => fmtN(v, 2), xLabel: 'Sample n', series: [{ x: idx, y: stp }], tip: i => `<b>n = ${i}</b><br>${stp[i].toPrecision(6)}` });
+  $('#cpPy').onclick = () => copy(pythonSnippet(d)); $('#cpC').onclick = () => copy(cSnippet(d, false)); $('#cpQ').onclick = () => copy(cSnippet(d, true));
+}
+
+/* ---------- quantization ---------- */
+function quantAnalysis(d, st) {
+  const q = st.q, nyq = st.fs / 2, out = {}, sigFmt = D.qFormat(0, q.sig - 1), x = D.testSignal(8192, 0.22);
+  const respOf = (b, a) => D.freqz(b, a, 2048, st.fs);
+  const sweepWords = Array.from({ length: 21 }, (_, i) => i + 4);
+  const atten = r => { const m = D.measure(r, d.bands); return m.passMax > -20 ? m.atten : NaN; };   // NaN = filter lost its passband
+  if (d.kind === 'fir') {
+    const qf = D.quantizeFir(d.h, q.coef, q.round), resp = respOf(qf.hq, null);
+    Object.assign(out, { fmt: qf.fmt, maxErr: qf.maxErr, resp, m: D.measure(resp, d.bands), zeros: D.polyRoots(qf.hq), poles: [], poleOrigin: d.h.length - 1, stable: true });
+    if (qf.fmt.fracBits >= 0) {
+      const sim = D.firFixedSim(d.h, x, qf.fmt, sigFmt, q.round), skip = d.h.length;
+      out.noise = D.variance(sim.y, sim.yq, skip); out.theory = D.firNoiseTheory(d.h, sigFmt, false);
+      out.sqnr = 10 * Math.log10(D.power(sim.yIdeal, skip) / D.variance(sim.y, sim.yIdeal, skip));
+    }
+    out.sweep = [{ name: 'Quantized coefficients', color: 'var(--s2)', y: sweepWords.map(w => atten(D.freqz(D.quantizeFir(d.h, w, q.round).hq, null, 1024, st.fs))) }];
+  } else {
+    const qs = D.quantizeSos(d.sos, q.coef, q.round), qd = D.quantizeDirect(d.b, d.a, q.coef, q.round);
+    const poleOf = sos => sos.flatMap(s => D.polyRoots(s.slice(3))), zeroOf = sos => sos.flatMap(s => D.polyRoots(s.slice(0, 3)));
+    const sosPoles = poleOf(qs.sq), sosStable = sosPoles.every(p => D.cabs(p) < 1);
+    out.sos = { fmt: qs.fmt, maxErr: qs.maxErr, resp: D.sosFreqz(qs.sq, 2048, st.fs, qs.gain), zeros: zeroOf(qs.sq), poles: sosPoles, stable: sosStable, maxR: Math.max(...sosPoles.map(D.cabs)) };
+    out.direct = { fmt: qd.fmt, maxErr: qd.maxErr, resp: D.freqz(qd.bq, qd.aq, 2048, st.fs, qd.gain), zeros: D.polyRoots(qd.bq), poles: qd.poles, stable: qd.stable, maxR: qd.maxRadius };
+    const act = q.struct === 'sos' ? out.sos : out.direct; Object.assign(out, { fmt: act.fmt, maxErr: act.maxErr, resp: act.resp, zeros: act.zeros, poles: act.poles, stable: act.stable, m: D.measure(act.resp, d.bands), maxR: act.maxR, poleOrigin: 0 });
+    if (out.sos.stable && qs.fmt.fracBits >= 0) {
+      const sim = D.sosFixedSim(qs.scaled, x, qs.fmt, sigFmt, q.round), skip = 600; out.sosSim = true;
+      out.noise = D.variance(sim.y, sim.yq, skip); out.theory = D.sosNoiseTheory(qs.sq, sigFmt);
+      out.sqnr = 10 * Math.log10(D.power(sim.yIdeal, skip) / D.variance(sim.y, sim.yIdeal, skip));
+    }
+    out.sweep = [
+      { name: 'Biquad cascade', color: 'var(--s2)', y: sweepWords.map(w => { const t = D.quantizeSos(d.sos, w, q.round); return t.sq.every(s => D.polyRoots(s.slice(3)).every(p => D.cabs(p) < 1)) ? atten(D.sosFreqz(t.sq, 1024, st.fs, t.gain)) : NaN; }) },
+      { name: 'Single direct form', color: 'var(--ink-3)', dash: true, y: sweepWords.map(w => { const t = D.quantizeDirect(d.b, d.a, w, q.round); return t.stable ? atten(D.freqz(t.bq, t.aq, 1024, st.fs, t.gain)) : NaN; }) },
+    ];
+  }
+  out.alive = out.stable && out.m.passMax > -20;
+  out.sweepWords = sweepWords; out.floatAtten = d.m.atten;
+  return out;
+}
+
+function renderQuant(d) {
+  const st = state, q = st.q, v = $('#view'), qa = quantAnalysis(d, st), nyq = st.fs / 2, iir = d.kind === 'iir';
+  const sliderBlock = (id, label, min, max, val, big) => `<div class="slider"><label for="${id}">${label}</label><span class="big num">${big}</span><input type="range" id="${id}" min="${min}" max="${max}" value="${val}"></div>`;
+  const fmtS = f => f.fracBits >= 0 ? `Q${f.intBits}.${f.fracBits}` : `step ${Math.pow(2, -f.fracBits)}`;
+  const deadMsg = qa.stable && !qa.alive ? `<div class="banner"><b>Passband lost.</b> At ${q.coef} bits the rounded coefficients are too coarse to pass the signal. Use more bits${iir && q.struct === 'direct' ? ' or switch to a biquad cascade' : ''}.</div>` : '';
+  const unstableMsg = deadMsg || (!qa.stable ? `<div class="banner"><b>Unstable.</b> After rounding to ${q.coef} bits, ${iir ? (q.struct === 'direct' ? 'a pole of the single high-order polynomial moved to radius ' + fmtN(qa.maxR, 3) + ', outside the unit circle.' : 'a biquad pole moved outside the unit circle.') : ''} Use more bits${iir && q.struct === 'direct' ? ' or switch to a biquad cascade' : ''}.</div>` : '');
+  const sweepNote = iir ? 'Gaps mean the filter went unstable or lost its passband at that word length.' : '';
+  v.innerHTML = `<div class="panel card"><div class="qctl">
+      ${sliderBlock('qCoef', 'Coefficient word length', 4, 24, q.coef, `${q.coef} bits <small class="unit">${fmtS(qa.fmt)}</small>`)}
+      ${sliderBlock('qSig', 'Signal word length', 8, 20, q.sig, `${q.sig} bits <small class="unit">Q0.${q.sig - 1}</small>`)}
+      <div><div class="field" style="grid-template-columns:1fr 130px;margin-top:0"><label for="qRound">Coefficient rounding</label><select id="qRound"><option value="nearest">Nearest</option><option value="floor">Floor (truncate)</option></select></div>
+      ${iir ? `<div class="field" style="grid-template-columns:1fr 130px"><label for="qStruct">Structure</label><select id="qStruct"><option value="sos">Biquad cascade</option><option value="direct">Single direct form</option></select></div>` : ''}</div></div></div>
+    <div class="grid2"><div class="col">
+      <div class="panel card"><div class="card-head"><h2>Response, before and after rounding</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)' }, { label: `Quantized, ${q.coef}-bit coefficients`, color: 'var(--s2)' }])}<div class="chart" id="qMag"></div>${unstableMsg}</div>
+      <div class="panel card"><div class="card-head"><h2>Stopband attenuation against word length</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)', dash: true }, ...qa.sweep.map(s => ({ label: s.name, color: s.color, dash: s.dash }))])}<div class="chart" id="qSweep"></div><p class="hint">${sweepNote} Marker on the chart is your current setting.</p><div id="qSweepT"></div></div></div>
+    <div class="col"><div class="panel card"><div class="card-head"><h2>Poles and zeros</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)' }, { label: 'Quantized', color: 'var(--s2)' }])}<div class="chart" id="qPZ"></div></div>
+      <div class="panel card"><div class="card-head"><h2>Rounding effects</h2></div>${quantScore(d, qa)}</div></div></div>`;
+  $('#qRound').value = q.round; if (iir) $('#qStruct').value = q.struct;
+  const upd = () => renderQuant(current);
+  $('#qCoef').oninput = e => { q.coef = +e.target.value; upd(); focusRestore('qCoef'); }; $('#qSig').oninput = e => { q.sig = +e.target.value; upd(); focusRestore('qSig'); };
+  $('#qRound').onchange = e => { q.round = e.target.value; upd(); }; if (iir) $('#qStruct').onchange = e => { q.struct = e.target.value; upd(); };
+  const fr = Array.from(d.resp.f), y = Array.from(qa.resp.db);
+  lineChart($('#qMag'), { label: 'Magnitude before and after quantization', height: 290, xd: [0, nyq], yd: yDomain(st), yLabel: 'Gain (dB)', xLabel: 'Frequency (Hz)', shades: magShades(st, d), series: [{ x: fr, y: Array.from(d.resp.db) }, { x: fr, y }],
+    tip: i => `<b>${fmtN(d.resp.f[i], 1)} Hz</b><br><span class="sw" style="background:var(--s1)"></span>${fmtN(d.resp.db[i], 2)} dB<br><span class="sw" style="background:var(--s2)"></span>${fmtN(y[i], 2)} dB` });
+  const wd = qa.sweepWords, series = [{ x: wd, y: wd.map(() => qa.floatAtten), color: 'var(--s1)', dash: true }, ...qa.sweep.map(s => ({ x: wd, y: s.y, color: s.color, dash: s.dash }))];
+  const all = series.flatMap(s => s.y).filter(Number.isFinite), hi = Math.max(...all, st.rs) + 6;
+  lineChart($('#qSweep'), { label: 'Stopband attenuation against coefficient word length', height: 250, xd: [4, 24], yd: [0, Math.ceil(hi / 10) * 10], xticks: [4, 8, 12, 16, 20, 24], fx: v => v, fy: v => v, xLabel: 'Coefficient word length (bits)', yLabel: 'Attenuation (dB)', series, hlines: [{ y: st.rs }],
+    tip: i => `<b>${wd[i]} bits</b><br>Float: ${fmtN(qa.floatAtten, 1)} dB` + qa.sweep.map(s => `<br><span class="sw" style="background:${s.color}"></span>${s.name}: ${Number.isFinite(s.y[i]) ? fmtN(s.y[i], 1) + ' dB' : 'unstable or no passband'}`).join('') });
+  const cur = $('#qSweep svg'); if (cur) { /* current-setting marker */ const W = cur.viewBox.baseVal.width, m = { l: 62, r: 14 }; const xv = m.l + (q.coef - 4) / 20 * (W - m.l - m.r); cur.insertAdjacentHTML('beforeend', `<line x1="${xv}" x2="${xv}" y1="22" y2="${250 - 24}" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="1 3" pointer-events="none"/>`); }
+  $('#qSweepT').innerHTML = tableDetails(['Bits', ...qa.sweep.map(s => s.name)], wd.map((w, i) => [w, ...qa.sweep.map(s => Number.isFinite(s.y[i]) ? fmtN(s.y[i], 1) + ' dB' : 'unstable or no passband')]));
+  pzChart($('#qPZ'), { zeros: d.zeros, poles: d.poles, poleOrigin: d.poleOrigin, qZeros: qa.zeros, qPoles: qa.poles, qPoleOrigin: qa.poleOrigin || 0, fs: st.fs });
+}
+function focusRestore(id) { const el = document.getElementById(id); if (el) el.focus(); }
+function quantScore(d, qa) {
+  const st = state, lsb = Math.pow(2, -qa.fmt.fracBits), row = (ok, lab, val, sub) => `<div class="row"><span class="ic ${ok ? 'ok' : 'no'}" aria-hidden="true">${ok ? '✓' : '✕'}</span><span class="lab">${lab}</span><span class="val num">${val}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
+  const stopOk = qa.alive && qa.m.atten >= st.rs - 0.01, ripOk = qa.alive && qa.m.ripple <= st.rp * 1.0005 + 1e-6;
+  let h = '<div class="score">';
+  h += row(qa.stable, 'Stability', qa.stable ? 'Stable' : 'Unstable', d.kind === 'fir' ? 'FIR filters cannot go unstable.' : `Largest pole radius ${fmtN(qa.maxR, 4)}`);
+  h += row(stopOk, 'Stopband attenuation', qa.alive ? fmtN(qa.m.atten, 1) + ' dB' : 'n/a', `Floating point gives ${fmtN(d.m.atten, 1)} dB. Spec ${st.rs} dB.`);
+  h += row(ripOk, 'Passband ripple', qa.alive ? fmtN(qa.m.ripple, 3) + ' dB' : 'n/a', `Floating point gives ${fmtN(d.m.ripple, 3)} dB. Spec ${st.rp} dB.`);
+  h += row(qa.maxErr <= lsb / 2 + 1e-15, 'Largest coefficient error', qa.maxErr.toExponential(1), `Rounding limit is half a step, ${(lsb / 2).toExponential(1)}. Format ${qa.fmt.fracBits >= 0 ? 'Q' + qa.fmt.intBits + '.' + qa.fmt.fracBits : 'coarser than 1 (step ' + Math.pow(2, -qa.fmt.fracBits) + ')'}.`);
+  if (qa.sqnr !== undefined && (d.kind === 'fir' || st.q.struct === 'sos')) {
+    const gap = 10 * Math.log10(qa.noise / qa.theory);
+    h += row(Math.abs(gap) < 3, 'Round-off noise', fmtN(10 * Math.log10(qa.noise), 1) + ' dB', `Theory predicts ${fmtN(10 * Math.log10(qa.theory), 1)} dB (${gap >= 0 ? '+' : ''}${fmtN(gap, 1)} dB off). ${d.kind === 'iir' ? 'Inside the cascade, before the output gain. ' : ''}Relative to a 1.0 full scale.`);
+    h += row(true, 'Signal-to-noise ratio', fmtN(qa.sqnr, 1) + ' dB', `Fixed-point output against the ideal floating-point filter, so coefficient rounding counts too. ${st.q.sig}-bit signal.`);
+  } else if (d.kind === 'iir' && st.q.struct === 'direct') h += '<div class="banner info">Round-off noise is simulated for the biquad cascade only. Direct form is shown for its coefficient sensitivity: switch Structure to see the noise figures.</div>';
+  else if (!qa.stable) h += '<div class="banner info">Noise simulation skipped because the quantized filter is unstable.</div>';
+  return h + '</div>';
+}
+
+/* ================= export ================= */
+function pythonSnippet(d) {
+  const st = state, nyq = st.fs / 2, e = st.edges, f = v => String(Math.round(v * 1e6) / 1e6);
+  const dp = (Math.pow(10, st.rp / 20) - 1) / (Math.pow(10, st.rp / 20) + 1), ds = Math.pow(10, -st.rs / 20);
+  const des = { lowpass: '[1, 0]', highpass: '[0, 1]', bandpass: '[0, 1, 0]', bandstop: '[1, 0, 1]' }[st.btype];
+  const w = { lowpass: [1 / dp, 1 / ds], highpass: [1 / ds, 1 / dp], bandpass: [1 / ds, 1 / dp, 1 / ds], bandstop: [1 / dp, 1 / ds, 1 / dp] }[st.btype].map(x => +x.toPrecision(5));
+  if (st.method === 'remez') return `from dsp import remez\nh = remez(${d.taps}, [0, ${e.map(f).join(', ')}, ${f(nyq)}], ${des},\n          weight=[${w.join(', ')}], fs=${st.fs})`;
+  if (st.method === 'window') { const cuts = st.btype === 'lowpass' || st.btype === 'highpass' ? [(e[0] + e[1]) / 2] : [(e[0] + e[1]) / 2, (e[2] + e[3]) / 2]; return `from dsp import fir_window\nh = fir_window(${d.taps}, ${cuts.length > 1 ? '[' + cuts.map(f).join(', ') + ']' : f(cuts[0])}, "${st.btype}", "${st.win}", fs=${st.fs}${st.win === 'kaiser' ? ', beta=' + fmtN(d.beta, 4) : ''})`; }
+  const sp = splitEdges(st.btype, e), ed = (st.method === 'cheby2' ? sp.stop : sp.pass), edTxt = ed.length > 1 ? '[' + ed.map(f).join(', ') + ']' : f(ed[0]);
+  return `from dsp import design_iir\nd = design_iir("${st.method}", "${st.btype}", ${d.order}, ${edTxt}, fs=${st.fs}, rp=${st.rp}, rs=${st.rs}${st.method === 'butter' ? ',\n               butter_edge_rp=' + st.rp : ''})\nsos = d["sos"]   # biquad cascade; d["b"], d["a"] hold the single polynomial form`;
+}
+function cSnippet(d, fixed) {
+  const st = state, q = st.q;
+  if (d.kind === 'fir') {
+    if (!fixed) return `// ${d.title}, fs = ${st.fs} Hz\nstatic const float h[${d.h.length}] = {\n  ${d.h.map(v => v.toExponential(9) + 'f').join(',\n  ')}\n};`;
+    const fm = D.autoFormat(Math.max(...d.h.map(Math.abs)), q.coef); const T = q.coef <= 16 ? 'int16_t' : 'int32_t';
+    return `// ${d.title}, fs = ${st.fs} Hz. Q${fm.intBits}.${fm.fracBits} coefficients (value = integer / 2^${fm.fracBits})\n#define H_FRAC_BITS ${fm.fracBits}\nstatic const ${T} h[${d.h.length}] = {\n  ${d.h.map(v => D.toInt(v, fm, q.round)).join(', ')}\n};`;
+  }
+  if (!fixed) return `// ${d.title}, fs = ${st.fs} Hz. Each row: b0 b1 b2 a1 a2 (a0 = 1)\nstatic const float sos[${d.sos.length}][5] = {\n${d.sos.map(s => '  { ' + [0, 1, 2, 4, 5].map(i => s[i].toExponential(9) + 'f').join(', ') + ' }').join(',\n')}\n};`;
+  const qs = D.quantizeSos(d.sos, q.coef, q.round), T = q.coef <= 16 ? 'int16_t' : 'int32_t';
+  return `// ${d.title}, fs = ${st.fs} Hz. Q${qs.fmt.intBits}.${qs.fmt.fracBits} coefficients. Each row: b0 b1 b2 a1 a2 (a0 = 1)\n#define SOS_FRAC_BITS ${qs.fmt.fracBits}\nstatic const ${T} sos[${d.sos.length}][5] = {\n${d.sos.map(s => '  { ' + [0, 1, 2, 4, 5].map(i => D.toInt(s[i], qs.fmt, q.round)).join(', ') + ' }').join(',\n')}\n};`;
+}
+function copy(text) {
+  const done = () => toast('Copied to clipboard');
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
+  function fallback() { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); done(); } catch (e) { toast('Copy failed. Select the text manually.'); } t.remove(); }
+}
+function toast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 1800); }
+
+/* ================= controls ================= */
+const miniIcon = bt => {
+  const p = { lowpass: 'M2 4H14Q18 4 20 8T26 12H32', highpass: 'M2 12H8Q14 12 16 8T22 4H32', bandpass: 'M2 12H9Q13 12 15 6T19 6T23 12H32', bandstop: 'M2 4H9Q13 4 15 10T19 10T23 4H32' }[bt];
+  return `<svg viewBox="0 0 34 16" aria-hidden="true"><path d="${p}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+};
+function buildControls() {
+  $('#controls').innerHTML = `
+  <section><h3>Method</h3><div class="method" role="radiogroup" aria-label="Design method">${Object.entries(METHODS).map(([k, m]) => `<label><input type="radio" name="method" value="${k}"><b>${m.name}</b><small>${m.note}</small></label>`).join('')}</div></section>
+  <section><h3>Response type</h3><div class="seg" id="btype" role="group" aria-label="Response type">${Object.entries(BTYPES).map(([k, l]) => `<button data-v="${k}" aria-pressed="false">${miniIcon(k)}${l}</button>`).join('')}</div></section>
+  <section><h3>Spec</h3>
+    <div class="field"><label for="fs">Sample rate</label><span><input id="fs" type="number" min="100" step="100"></span></div>
+    <div id="edgeFields"></div>
+    <div class="field"><label for="rp">Passband ripple</label><span><input id="rp" type="number" min="0.01" max="6" step="any"></span></div>
+    <div class="field"><label for="rs">Stopband attenuation</label><span><input id="rs" type="number" min="10" max="140" step="any"></span></div>
+    <p class="hint">Frequencies in Hz, ripple and attenuation in dB.</p></section>
+  <section><h3>Size</h3>
+    <div class="field hidden" id="winRow"><label for="win">Window</label><select id="win">${Object.entries(WINDOWS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
+    <div class="seg" id="omode" role="group" aria-label="Order selection"><button data-v="auto" aria-pressed="true">Pick for me</button><button data-v="manual" aria-pressed="false">Set it</button></div>
+    <div class="field"><label for="ord" id="ordLab">Taps</label><span><input id="ord" type="number" min="1" step="1"></span></div>
+    <p class="hint" id="ordHint"></p></section>`;
+  $$('input[name=method]').forEach(r => r.addEventListener('change', () => { state.method = r.value; if (METHODS[r.value].kind === 'iir' && state.orderMode === 'manual') state.order = clamp(current?.order || 4, 1, 24); syncControls(); scheduleRender(); }));
+  $$('#btype button').forEach(b => b.addEventListener('click', () => { state.btype = b.dataset.v; state.edges = defaultEdges(state.btype, state.fs); syncControls(); scheduleRender(); }));
+  $('#fs').addEventListener('input', e => { const nf = +e.target.value; if (nf >= 100) { const r = nf / state.fs; state.edges = state.edges.map(x => Math.round(x * r)); state.fs = nf; syncControls(true); scheduleRender(); } });
+  $('#rp').addEventListener('input', e => { if (+e.target.value > 0) { state.rp = +e.target.value; scheduleRender(); } });
+  $('#rs').addEventListener('input', e => { if (+e.target.value > 0) { state.rs = +e.target.value; scheduleRender(); } });
+  $('#win').addEventListener('change', e => { state.win = e.target.value; scheduleRender(); });
+  $$('#omode button').forEach(b => b.addEventListener('click', () => { state.orderMode = b.dataset.v; if (b.dataset.v === 'manual' && current) state.order = current.kind === 'fir' ? current.taps : current.order; syncControls(); scheduleRender(); }));
+  $('#ord').addEventListener('input', e => { const n = Math.round(+e.target.value); if (n >= 1) { state.order = n; scheduleRender(); } });
+}
+function syncControls(skipFs) {
+  const st = state, M = METHODS[st.method];
+  $$('input[name=method]').forEach(r => { r.checked = r.value === st.method; });
+  $$('#btype button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === st.btype)));
+  if (!skipFs && document.activeElement !== $('#fs')) $('#fs').value = st.fs;
+  if (document.activeElement !== $('#rp')) $('#rp').value = st.rp; if (document.activeElement !== $('#rs')) $('#rs').value = st.rs;
+  const host = $('#edgeFields'), n = st.edges.length;
+  if (host.dataset.sig !== st.btype) {
+    host.dataset.sig = st.btype;
+    host.innerHTML = LABELS[st.btype].map((l, i) => `<div class="field"><label for="e${i}">${l}</label><span><input id="e${i}" type="number" step="any" data-i="${i}"></span></div>`).join('');
+    $$('#edgeFields input').forEach(inp => inp.addEventListener('input', () => {
+      const i = +inp.dataset.i, v = +inp.value; if (!(v > 0)) return; const gap = Math.max(st.fs / 800, 1), e = st.edges.slice();
+      e[i] = clamp(v, (e[i - 1] ?? 0) + gap, (e[i + 1] ?? st.fs / 2) - gap); st.edges = e; scheduleRender();
+    }));
+    $$('#edgeFields input').forEach(inp => inp.addEventListener('change', () => syncControls()));
+  }
+  $$('#edgeFields input').forEach((inp, i) => { if (document.activeElement !== inp) inp.value = Math.round(st.edges[i]); });
+  $('#winRow').classList.toggle('hidden', st.method !== 'window'); $('#win').value = st.win;
+  $$('#omode button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === st.orderMode)));
+  const ord = $('#ord'); ord.disabled = st.orderMode === 'auto'; $('#ordLab').textContent = M.kind === 'fir' ? 'Taps' : (st.btype === 'bandpass' || st.btype === 'bandstop' ? 'Prototype order' : 'Order'); ord.max = M.kind === 'fir' ? 1201 : 24;
+  if (document.activeElement !== ord) ord.value = st.orderMode === 'manual' ? st.order : (current ? (current.kind === 'fir' ? current.taps : current.order) : '');
+  $('#ordHint').textContent = st.orderMode === 'auto' ? (st.method === 'remez' ? 'Searches for the fewest taps that meet the spec.' : st.method === 'window' ? 'From the transition width and window.' : (st.btype === 'bandpass' || st.btype === 'bandstop' ? 'Lowest order that meets the spec. Band filters end up twice the prototype order.' : 'Lowest order that meets the spec.')) : 'Manual size. The spec check shows what you get.';
+}
+
+/* ================= render loop ================= */
+function scheduleRender() { if (renderQueued) return; renderQueued = true; requestAnimationFrame(() => { renderQueued = false; render(); }); }
+function render() {
+  const st = state; let d;
+  try { d = designFilter(st, fastMode); } catch (err) { $('#view').innerHTML = `<div class="banner">Could not design this filter: ${esc(err.message)}. Check that the edges increase and stay below half the sample rate.</div>`; console.error(err); return; }
+  current = d;
+  if (st.orderMode === 'auto' && document.activeElement !== $('#ord')) $('#ord').value = d.kind === 'fir' ? d.taps : d.order;
+  $$('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === st.tab)));
+  if (st.tab === 'response') renderResponse(d); else if (st.tab === 'time') renderTime(d); else renderQuant(d);
+  if (st.tab === 'response') drawn = true;
+  $('#subtitle').textContent = d.title;
+  if (fastMode) { clearTimeout(render.t); render.t = setTimeout(() => { fastMode = false; scheduleRender(); }, 160); }
+}
+
+function init() {
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches; document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  $('#theme').textContent = dark ? 'Light theme' : 'Dark theme';
+  $('#theme').addEventListener('click', () => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = t; $('#theme').textContent = t === 'dark' ? 'Light theme' : 'Dark theme'; render(); });
+  $('#copyPy').addEventListener('click', () => current && copy(pythonSnippet(current)));
+  $$('.tabs button').forEach(b => b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); }));
+  buildControls(); syncControls();
+  let rt; new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => current && render(), 120); }).observe($('#view'));
+  render(); window.__filterlab = { state, designFilter, get current() { return current; } };
+}
+document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>

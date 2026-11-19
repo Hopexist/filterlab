@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filterlab: digital filter design</title>
+<style>/*CSS*/</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><h1>Filterlab</h1><span id="subtitle">Digital filter design</span></div>
+  <div class="top-actions"><button class="btn" id="copyPy" title="Copy the Python call that reproduces this design">Copy Python</button><button class="btn" id="theme">Dark theme</button></div>
+</header>
+<main class="app">
+  <aside class="panel controls" id="controls" aria-label="Filter design controls"></aside>
+  <section class="stage">
+    <div class="tabs" role="tablist" aria-label="Views">
+      <button role="tab" data-tab="response" aria-selected="true">Response</button>
+      <button role="tab" data-tab="time" aria-selected="false">Time and coefficients</button>
+      <button role="tab" data-tab="quant" aria-selected="false">Quantization</button>
+    </div>
+    <div id="view" role="tabpanel" aria-live="polite"></div>
+  </section>
+</main>
+<script>/*DSP*/</script>
+<script>/*APP*/</script>
+</body>
+</html>

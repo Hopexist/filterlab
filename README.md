@@ -136,6 +136,14 @@ attenuation, taps, word lengths, SNR) are large tabular numbers with small units
 separately. Floating-point traces are blue and wide; quantized traces are orange and thin, so the two differ by line
 weight as well as colour. The design notes are in [docs/ui-design.md](docs/ui-design.md).
 
+**Interacting with it.**
+- Hovering any Response plot shows the same frequency on magnitude, phase and the pole-zero plot (the point e^jω on the unit circle).
+- Dragging a word-length or order slider redraws live, with the previous trace left faint behind the new one.
+- Five themes are in the header (Instrument light and dark, Swiss, Phosphor, Paper), and your choice is remembered.
+- Keyboard: `1`-`4` switch tabs, `T` changes theme, `S`/`R` step or run the hardware simulator, `G` starts a six-step guided tour (it never starts on its own), `D` downloads a spec-sheet drawing (SVG) with dimension lines and the spec check, and `?` lists the shortcuts.
+- "Explore: drag poles and zeros" lets you move a copy of the roots and see a dashed what-if response. It is labelled as exploration and never changes the design or its spec check.
+- With reduced motion set in your system, nothing animates.
+
 ![Response tab, light theme: magnitude with spec shading and draggable band edges, poles and zeros, spec check](docs/screenshots/response-light.png)
 
 ![Phone layout: Response tab in light, Signal tab in dark](docs/screenshots/phone.png)

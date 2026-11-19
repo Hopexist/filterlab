@@ -1,56 +1,77 @@
-# Status: autonomous run on `auto/ui-polish`
+# Status: autonomous run on `auto/ui-interactive`
 
-Run: 2026-11-19, 19:54Z to about 20:20Z (hard stop was 21:24Z). Branch `auto/ui-polish` from `master` at e2ad9ac,
-after `auto/rtl-sim` had been merged. Nothing was pushed. The previous run's status is in git history at `01eed95`.
+Run: 2026-11-19, 21:31Z to about 22:00Z (hard stop was 23:31Z). Branch `auto/ui-interactive` from `master` at
+2ec3ddb (after `auto/ui-polish` was merged). Nothing was pushed. Scope was UI/UX only: `dsp/` is untouched, and no
+computed number, honesty label or pass/fail rule changed.
 
-**Headline:** Filterlab now reads as one bench instrument rather than a dashboard.
-- Each plot is a recessed screen with a major and minor graticule inside a bezel.
-- The readouts (ripple, attenuation, taps, word lengths, SNR) are 28-30 px DIN numerals with small muted units.
-- Light ("bench daylight") and dark ("scope at night") are designed separately.
-- The Quantization tab now leads with its result.
-- Phones open each tab on its plot.
+**Headline.** Filterlab now has:
+- five themes;
+- a cursor shared across the Response plots;
+- live scrubbing with a faint previous trace;
+- transitions that only answer an action (none with reduced motion);
+- keyboard shortcuts with a help dialog;
+- a six-step guided tour;
+- an SVG spec-sheet drawing;
+- a pole-zero what-if mode labelled as exploration.
 
-No DSP code, computed number or honesty label changed. Every suite stayed green before each commit.
+`ui_sweep` covers all of it with real pointer and key events.
+
+**Found, needs your decision (not fixed, outside the allowed scope).** Parks-McClellan breaks for long filters at the default spec:
+- at 160 taps and above, `web/dsp.js` `remez` returns all-zero coefficients and `dsp/remez.py` returns NaN;
+- the app then shows an empty response, and the Spec check marks it ✓ ("0 dB ripple, 240 dB attenuation"): **a false pass**.
+
+Auto mode (36 taps) is not affected; a manual order of 160 or more is. The new order slider goes up to 256 taps for FIR, which makes the problem easier to reach. The fix belongs in `remez` (Python first, then JS), plus a spec-check guard against an all-zero or non-finite filter. Both need your approval under the run rules.
+
+## Tool inventory (present or absent, and what each influenced)
+
+| Requested | Present? | Influence |
+|---|---|---|
+| impeccable | present | anti-pattern check on the direction pick; detector at the end (clean except the known 390 px segmented-control false positive) |
+| ui-ux-pro-max | present | not re-queried this run; its earlier takeaways (dense spacing, mono for data, not colour alone) still apply |
+| fonthound | present | not used: it needs the owner to pick by eye, and this run takes no questions |
+| diagram-design | present | its rules (orthogonal dimension lines, a title block, two accents) shaped the spec-sheet drawing; the skill was not invoked |
+| dataviz | present | validator run on every theme's trace pair; Phosphor's first pick failed and was corrected |
+| frontend-design | **absent** | (ecc's `frontend-design-direction` exists; not used as a substitute) |
+| stageshow | **absent** | tour built by hand |
+| dimensional-drawing | **absent** | spec sheet built by hand |
+| oil-ui | **absent** | 3 directions built by hand as real themes (`docs/ui-directions.md`) |
+| emilkowalski skills | **absent** | the brief's fallback motion rules were followed |
+| taste-skill | **absent** | dials applied by hand and logged (layout 3, motion 3, density 7) |
+| brand-identity | **absent** | current identity kept |
+| awwwards MCP | **absent** | no references pulled |
+
+No vendored anime.js or motion.dev: motion is CSS plus the Web Animations API. Nothing was installed or fetched.
 
 ## Done
 
-| Task | What landed | Commit |
+| Step | What landed | Commit |
 |---|---|---|
-| 1 | `docs/ui-critique.md`: Impeccable critique from two isolated reviews (a design review and detector/mechanical evidence) at 1440 and 390 px in light and dark. It lists the top 10 problems | `46ddd51` |
-| 2 | `docs/ui-design.md`: named-hex palette for both themes, type roles, layout, principles, and a self-review against generic defaults (4 revisions). `docs/ui-contrast.py` measures every pairing | `0e731d0` |
-| 3 | Tokens and typography: screen, bezel and graticule tokens; the DIN display face (Bahnschrift, system stack); hero readouts with split units; 40 px minimum targets; themed selection and scrollbars; 4 px radii. Light ink-3 rises from 4.09:1 to 4.76:1 | `7c06560` |
-| 4 | Plots: screen surface, minor graticule, 12 px ink-2 tick labels, DIN axis titles. Pole-zero gets a bezel, drawn legend marks and a haloed multiplicity label. Ideal vs quantized now differ by line weight (wide vs thin) as well as colour. The dataviz validator passes both themes | `3ccbbf0` |
-| 5 | Layout: Rounding effects first; hardware export and the simulator in a full-width row; the biquad diagram in the plot column; long explanations folded (wording unchanged); phones show the stage before the controls; h2 group titles fix the skipped heading level | `48c182d` |
-| 6 | Motion: the trace draw on load is removed. There is a 160 ms fade on tab change, a 140 ms reveal when a panel opens, and 120 ms colour transitions, all only without reduced motion | `0120596` |
-| 7 | Final pass: I looked at every screenshot and fixed the unreadable First samples plot (now 120 samples), legend line weights, and the stripe swatch. README has a screenshot section (`docs/screenshots/`) | `a696bd0` |
-| Stretch | **Skipped.** Remotion and HyperFrames are not installed, and `npx` would download them (network and install are not allowed) | (none) |
+| 0-1 | Tool inventory (`docs/RUNLOG.md`); four directions side by side (`docs/screenshots/directions.png`); Instrument stays the default, with reasons (`docs/ui-directions.md`) | `d445610` |
+| 2 | Themes: Instrument light and dark, Swiss, Phosphor, Paper. Header switcher remembered per viewer (try/catch on storage); validator, AA contrast and line-weight encoding in every theme. Neumorphism, Pixel Art, Maximalism and Surrealism were not built (legibility); anything else requested is "later" | `11dc428` |
+| 3a-f | Linked cursor (also by arrow keys); scrubbing with the controls kept and the previous trace faint; trace morph and counting readouts; shortcuts and the help `<dialog>`; guided tour (never auto-plays, restores your design); spec sheet SVG | `a24077f` |
+| 4 | Verification fixes: spec-sheet label collisions, tour card placement, tour control sync | `0c06725` |
+| 3g (stretch) | Pole-zero what-if, labelled "Exploration, not a spec-meeting design" | `086d335` |
+| docs | README section on the interactions; this status | (wrap-up commit) |
 
-## Final test results
+## Verification
 
-| Command | Result |
+| Check | Result |
 |---|---|
-| `npm run test:all` (py, js, rtl, rtlsim, ui) | pass: 91 pytest, 204 cross-checks, 22 RTL (iverilog step skipped, not installed), 86 interpreter checks, UI sweep, 24 screenshots, no console errors |
-| dataviz `validate_palette.js` | light on `#fcfdfc` and dark on `#0a0d0e`: all checks pass (CVD ΔE 24.7 / 26.8, normal ΔE 33.6 / 31.8) |
-| `impeccable detect` | file and 1440×1000: clean. 390×844: "nested cards" on the segmented control in two card headers (judged a false positive, see DECISIONS) |
+| `npm run test:all` | pass: 91 pytest, 204 cross-checks, 22 RTL tests (iverilog not installed, so not simulated), 86 interpreter checks, UI sweep, 36 screenshots, no console errors |
+| `ui_sweep` additions | every theme (applies, survives a reload, no sideways scroll at 1440 and 390); linked cursor (same Hz on 3 plots, arrow keys); scrub (slider kept, faint trace, release redraw); motion (0 animations with reduced motion, morph and fade without, readouts settle exactly); shortcuts and help; **keyboard-only tour** (G, arrows, Tab to Finish, Enter, design restored, never on load); spec sheet (valid SVG, dimensions, same wording); what-if (label, trace moves, spec check unchanged) |
+| Screenshots | all 36 looked at, plus close-ups of the tour, the spec sheet and every theme on a phone |
+| Performance at 256 taps | linked-cursor broadcast 1.1 ms median / 1.6 ms p95; order scrub about 65 ms per frame; word-length scrub 95-145 ms per frame; one redraw of about 1 s when you release a 256-tap scrub (root-finding for the pole-zero plot, now lazy and skipped mid-scrub) |
 
 ## Decisions to review (details in `docs/DECISIONS.md`)
 
-- I asked no questions. Impeccable's probe and FontHound's pick-by-eye were skipped, and product context came from CLAUDE.md and the brief.
-- Fonts are a system stack (Bahnschrift, i.e. DIN 1451), with no embedded font. Impeccable's craft floor rejects system display faces; the brief overrides it. On macOS/Linux the fallback is DIN Alternate, Barlow, Roboto Condensed, then system-ui, so the look there is less distinct.
-- Phones put the plot before the controls, so editing the spec means scrolling down. A bottom sheet was rejected as too risky for this pass.
-- The hardware cards moved to a full-width row on the Quantization tab, and their long explanations are folded. The honesty tags and the plain simulator label stay visible.
-- The First samples plot shows 120 samples (was 400). This is a display window, not a computed number, and the caption says so.
+- Instrument stays the default. Phosphor and Paper ship as opt-in themes even though the earlier critique called their patterns generic tells, because the brief asked for them.
+- FIR zeros are computed lazily (the same function, on first use), and long-FIR pole-zero plots wait until you release a scrub.
+- The tour loads a demo design and restores yours at the end.
+- The what-if response is normalised to a 0 dB peak.
+- I added `press` and `setMotion` helpers to `tests/browser.js`, so the tests send real keys and can turn reduced motion on and off.
 
 ## Not verified
 
-- The look on macOS or Linux, where Bahnschrift is absent. Only Windows Edge was rendered.
-- Real touch devices: phone layouts were checked by 390 px screenshots and the sweep's 44 px target check.
-- Forced-colors / high-contrast mode.
-- Motion was checked only by code review: screenshots don't show it, and the sweep doesn't measure it.
-
-Plugins used:
-- **impeccable:** critique with two isolated reviewers, craft floor, and the detector before and after.
-- **ui-ux-pro-max:** design-system, chart and typography queries. What I took and rejected is logged.
-- **fonthound:** no selection on disk; it informed the system-stack decision.
-- **dataviz:** palette validator, both themes.
-- **diagram-design:** its rules from the earlier run were reapplied to the restyled biquad diagram; I did not invoke the skill again.
+- Real touch dragging on a phone: scrub and what-if were driven by mouse events and key presses.
+- Firefox and Safari: only headless Edge was run. The trace morph needs `d` to be animatable and silently does nothing where it isn't.
+- Screen-reader output for the tour and the what-if handles: ARIA roles and labels are set, but no screen reader was run.

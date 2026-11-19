@@ -799,8 +799,8 @@ function specSheetSvg(d, st) {
   for (let i = 0; i + 1 < edges.length; i++) { const a = sx(edges[i]), b = sx(edges[i + 1]); if (b - a > 18) s += arrow(a, dy, b, dy, `${num(edges[i + 1] - edges[i], 0)} Hz`, (a + b) / 2, dy - 6); }
   // ripple and attenuation, dimensioned at the first pass band and the first stop band
   const pb = d.bands.find(b => b.type === 'pass'), sb = d.bands.find(b => b.type === 'stop');
-  if (sb && Number.isFinite(m.atten)) { const x = sx(sb.lo + (sb.hi - sb.lo) * 0.62); s += arrow(x, sy(0), x, sy(-m.atten), `attenuation ${num(m.atten, 1)} dB (target ${st.rs} dB or more)`, x + 8, (sy(0) + sy(-m.atten)) / 2, 'start') + `<line class="ext" x1="${x - 30}" x2="${x + 30}" y1="${sy(0)}" y2="${sy(0)}"/>`; }
-  if (pb && Number.isFinite(m.ripple)) { const x = sx(pb.lo + (pb.hi - pb.lo) * 0.5), ya = sy(0) - 34; s += `<line class="dim" x1="${x}" y1="${ya}" x2="${x}" y2="${sy(0) - 2}" marker-end="url(#ar)"/><text class="dimt" x="${x}" y="${ya - 6}" text-anchor="middle">passband ripple ${e(num(m.ripple, 3))} dB (target ${st.rp} dB or less)</text>`; }
+  if (sb && Number.isFinite(m.atten)) { const x = sx(sb.lo + (sb.hi - sb.lo) * 0.62), right = x > P.l + iw * 0.55; s += arrow(x, sy(0), x, sy(-m.atten), `attenuation ${num(m.atten, 1)} dB (target ${st.rs} dB or more)`, right ? x - 8 : x + 8, (sy(0) + sy(-m.atten)) / 2, right ? 'end' : 'start') + `<line class="ext" x1="${x - 30}" x2="${x + 30}" y1="${sy(0)}" y2="${sy(0)}"/>`; }
+  if (pb && Number.isFinite(m.ripple)) { const x = sx(pb.lo + (pb.hi - pb.lo) * 0.5), yb = sy(-14); s += `<line class="dim" x1="${x}" y1="${yb}" x2="${x}" y2="${sy(0) + 4}" marker-end="url(#ar)"/><text class="dimt" x="${Math.max(x, P.l + 8)}" y="${yb + 16}" text-anchor="${x < P.l + 160 ? 'start' : 'middle'}">passband ripple ${e(num(m.ripple, 3))} dB (target ${st.rp} dB or less)</text>`; }
   // title block: parameters, measured values and the spec check exactly as the app states it
   const tx = P.l, ty = H - P.b + 46, rowsL = [['Method', d.title], ['Response type', st.btype], ['Sample rate', `${st.fs} Hz`], ['Band edges', `${st.edges.join(', ')} Hz`], ['Size', d.size]];
   const rowsR = [['Passband ripple', `${num(m.ripple, 3)} dB`, `Target ${st.rp} dB or less${d.passRipple ? '' : '. Over by ' + num(m.ripple - st.rp, 3) + ' dB'}`, d.passRipple],
@@ -854,12 +854,12 @@ function tourStart() {
 }
 function tourEnd() {
   if (tourAt < 0) return; tourAt = -1; $('#tour').hidden = true;
-  const saved = JSON.parse(tourSaved); Object.assign(state, saved.state); state.q = saved.q; render();
+  const saved = JSON.parse(tourSaved); Object.assign(state, saved.state); state.q = saved.q; syncControls(); render();
   toast('Tour closed. Your design is back.'); if (tourReturnFocus && tourReturnFocus.focus) tourReturnFocus.focus();
 }
 function tourGo(i) {
   tourAt = clamp(i, 0, TOUR.length - 1); const stp = TOUR[tourAt];
-  if (stp.act) stp.act();
+  if (stp.act) { stp.act(); syncControls(); }   // the side panel shows the demo design too
   if (state.tab !== stp.tab || stp.act) { state.tab = stp.tab; render(); }
   $('#tourStep').textContent = `Step ${tourAt + 1} of ${TOUR.length}`; $('#tourTitle').textContent = stp.title; $('#tourText').textContent = stp.text;
   $('#tourBack').disabled = tourAt === 0; $('#tourNext').textContent = tourAt === TOUR.length - 1 ? 'Finish' : 'Next';
@@ -869,8 +869,12 @@ function tourGo(i) {
     const ring = $('.tour-ring'), card = $('.tour-card'); if (!el) { ring.style.opacity = 0; return; }
     const r = el.getBoundingClientRect(), pad = 6; ring.style.opacity = 1;
     Object.assign(ring.style, { left: r.left - pad + 'px', top: r.top - pad + 'px', width: r.width + 2 * pad + 'px', height: r.height + 2 * pad + 'px' });
-    const cw = card.offsetWidth, ch = card.offsetHeight, below = r.bottom + 16 + ch < innerHeight;
-    card.style.left = clamp(r.left, 12, innerWidth - cw - 12) + 'px'; card.style.top = clamp(below ? r.bottom + 16 : r.top - ch - 16, 12, innerHeight - ch - 12) + 'px';
+    const cw = card.offsetWidth, ch = card.offsetHeight, below = r.bottom + 16 + ch < innerHeight, above = r.top - ch - 16 > 0;
+    let left = clamp(r.left, 12, innerWidth - cw - 12), top = below ? r.bottom + 16 : r.top - ch - 16;
+    if (!below && !above) {   // a tall target: sit beside it rather than on top of it, if there is room
+      if (r.left - cw - 16 >= 12) { left = r.left - cw - 16; top = r.top; } else if (r.right + 16 + cw <= innerWidth - 12) { left = r.right + 16; top = r.top; }
+    }
+    card.style.left = left + 'px'; card.style.top = clamp(top, 12, innerHeight - ch - 12) + 'px';
   };
   place(); setTimeout(place, calm() ? 0 : 320);   // again after the smooth scroll settles
   $('#tourTitle').focus({ preventScroll: true });

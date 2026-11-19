@@ -50,3 +50,4 @@
   | brand-identity | **absent** | current identity kept |
   | awwwards MCP | **absent** | no references pulled |
 - No vendored anime.js or motion.dev in the repo, so motion uses CSS and the Web Animations API only.
+- 21:54Z steps 0-4 committed; full gate green; 36 shots reviewed.

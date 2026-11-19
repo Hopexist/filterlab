@@ -154,3 +154,9 @@ Format: decision / why / rejected alternative.
   - It also says the figures are measured by Filterlab's spec check on the floating-point design. Valid SVG, checked in `ui_sweep`.
 - **Interaction g. Pole-zero "what-if" (stretch): not built.** Time went to verification instead.
 - **Found, not fixed (needs owner approval: `dsp/` and the pass/fail logic are out of scope).** Parks-McClellan fails for long filters at the default spec: at 160 taps and above, `web/dsp.js` `remez` returns all-zero coefficients, and `dsp/remez.py` returns NaN (divide by zero in the barycentric step). With a manual order of 160 or more, the app then shows an empty response and the Spec check marks ✓ "0 dB ripple, 240 dB attenuation", which is a false pass. Auto mode (36 taps) never gets there. The fix belongs in `remez` (and the spec check should reject an all-zero or non-finite filter). The new order slider allows up to 256 taps for FIR; Remez is broken above about 150 taps, so treat those results as invalid until this is fixed.
+- **Verify.** I looked at all 36 screenshots, plus close-ups of the tour, the spec sheet and every theme on a phone. Fixed from that look:
+  - the spec sheet's ripple label collided with the edge dimension, and the attenuation label ran off the sheet;
+  - the tour card covered tall targets, so it now sits beside them when it fits neither above nor below;
+  - the tour changed the design without updating the side panel's fields, and restoring had the same gap; both now resync the controls, and `ui_sweep` checks the field.
+
+  Impeccable's detector: file and 1440×1000 clean. At 390×844 it still reports the segmented-control "nested cards" false positive from the last run.

@@ -200,6 +200,7 @@ const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
       await p.evaluate(() => document.getElementById('theme').value = 'light'); await p.evaluate(() => { const s = document.getElementById('theme'); s.dispatchEvent(new Event('change')); document.activeElement.blur(); });
       await p.press('?'); const helpOpen = await p.evaluate(() => document.getElementById('help').open); await p.press('Escape'); const helpClosed = !(await p.evaluate(() => document.getElementById('help').open));
       await p.evaluate(() => { const i = document.getElementById('sigF') || document.querySelector('#controls input[type=number]'); i.focus(); }); await p.press('2'); const typingSafe = await p.evaluate(() => window.__filterlab.state.tab);
+      await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { fs: 8000, edges: [1000, 1500] }); document.activeElement.blur(); document.querySelector('[data-tab=time]').click(); document.querySelector('[data-tab=quant]').click(); });   // undo the digit typed into the field
       console.log('shortcuts:', JSON.stringify({ tab3, cmp, th0, th1, helpOpen, helpClosed, typingSafe }));
       if (tab3 !== 'quant') problems.push('shortcut 3 did not open the Quantization tab');
       if (!/2 of 2 samples identical so far/.test(cmp)) problems.push(`shortcut S did not step the simulator one clock at a time (${cmp})`);
@@ -211,13 +212,14 @@ const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
       await p.press('g'); await p.wait(200);
       const t1 = await p.evaluate(() => ({ at: window.__filterlab.tourAt, focus: document.activeElement.id, method: window.__filterlab.state.method }));
       for (let i = 0; i < 5; i++) { await p.press('ArrowRight'); await p.wait(120); }
-      const t6 = await p.evaluate(() => ({ at: window.__filterlab.tourAt, tab: window.__filterlab.state.tab, step: document.getElementById('tourStep').textContent, ring: getComputedStyle(document.querySelector('.tour-ring')).opacity }));
+      const t6 = await p.evaluate(() => ({ fsField: [...document.querySelectorAll('#controls .field')].find(f => /Sample rate/.test(f.textContent))?.querySelector('input').value, at: window.__filterlab.tourAt, tab: window.__filterlab.state.tab, step: document.getElementById('tourStep').textContent, ring: getComputedStyle(document.querySelector('.tour-ring')).opacity }));
       await p.screenshot(path.join(SHOTS, 'tour-step6.png'), { fullPage: false });
       await p.press('Tab'); await p.press('Tab'); await p.press('Tab'); const onFinish = await p.evaluate(() => document.activeElement.id + ':' + document.activeElement.textContent);
       await p.press('Enter'); await p.wait(250);
       const end = await p.evaluate(() => ({ at: window.__filterlab.tourAt, hidden: document.getElementById('tour').hidden, method: window.__filterlab.state.method, rs: window.__filterlab.state.rs, tab: window.__filterlab.state.tab }));
       console.log('tour (keyboard only):', JSON.stringify({ t1, t6, onFinish, end }));
       if (t1.at !== 0 || t1.focus !== 'tourTitle' || t1.method !== 'cheby1') problems.push(`tour: G did not open step 1 with focus on its title (${JSON.stringify(t1)})`);
+      if (t6.fsField !== '8000') problems.push(`tour: the side panel does not show the demo design (sample rate field ${t6.fsField})`);
       if (t6.at !== 5 || t6.tab !== 'quant' || t6.step !== 'Step 6 of 6' || t6.ring !== '1') problems.push(`tour: arrow keys did not reach step 6 on the simulator (${JSON.stringify(t6)})`);
       if (onFinish !== 'tourNext:Finish') problems.push(`tour: Tab did not reach the Finish button (${onFinish})`);
       if (!end.hidden || end.at !== -1 || end.method !== 'remez' || end.rs !== 55 || end.tab !== 'time') problems.push(`tour: Finish did not close it and restore the design (${JSON.stringify(end)})`);

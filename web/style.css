@@ -63,7 +63,7 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; margin: 0; letter-spac
 .tabs button { background: none; border: 0; padding: 10px 16px; cursor: pointer; color: var(--ink-2); border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
 .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
-.col { display: grid; gap: 14px; min-width: 0; }
+.col { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }   /* the track must not grow to fit wide content (the diagram scrolls instead) */
 .card { padding: 14px 16px 12px; }
 .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
 .card-head h2 { font-size: 17px; }
@@ -182,3 +182,11 @@ table.t th { color: var(--ink-3); font-weight: 500; }
 .tools.play { flex-wrap: wrap; margin-top: 12px; gap: 8px; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 @media (max-width: 860px) { .sigctl { grid-template-columns: minmax(0, 1fr); } }
+
+/* hardware export */
+.tag { font-size: 12px; color: var(--ink-2); border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; }
+pre.code { max-height: 360px; overflow: auto; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--ink); white-space: pre; tab-size: 2; }
+.caption code { font: 12px ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.sub-h { font-size: 15px; margin: 16px 0 4px; }
+.score.plain .row { grid-template-columns: 1fr auto; }
+.score.plain .sub { grid-column: 1 / -1; }

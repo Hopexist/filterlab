@@ -8,6 +8,7 @@
     "test:py": "node run_tests.js py",
     "test:js": "node run_tests.js js",
     "test:ui": "node run_tests.js ui",
+    "test:rtl": "node run_tests.js rtl",
     "test:all": "node run_tests.js all",
     "test": "node run_tests.js all",
     "serve": "node run_tests.js serve"

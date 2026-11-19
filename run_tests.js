@@ -26,7 +26,8 @@ const tasks = {
   py: () => py()('-m', 'pytest', 'tests', '-q'),
   js: () => { py()('tests/export_reference.py'); run(process.execPath, ['tests/cross_check.js']); },
   ui: () => { tasks.build(); run(process.execPath, ['tests/ui_sweep.js']); run(process.execPath, ['tests/ui_shots.js']); },
-  all: () => { tasks.py(); tasks.js(); tasks.ui(); console.log('\nall test suites passed'); },
+  rtl: () => { const p = py(); p('-m', 'pytest', 'tests/test_rtl.py', '-q'); p('tests/rtl_sim.py'); },
+  all: () => { tasks.py(); tasks.js(); tasks.rtl(); tasks.ui(); console.log('\nall test suites passed'); },
   serve: () => {
     const l = python(), port = process.env.PORT || '8000';
     console.log(`Serving web/ at http://localhost:${port}/ (open it in VS Code's Simple Browser). Ctrl+C to stop.`);

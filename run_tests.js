@@ -1,4 +1,4 @@
-// Cross-platform task runner (no && chains, no POSIX tools). Usage: node run_tests.js <py|js|ui|all|build|serve>
+// Cross-platform task runner (no && chains, no POSIX tools). Usage: node run_tests.js <py|js|rtl|rtlsim|ui|all|build|serve>
 const { spawnSync, spawn } = require('child_process');
 const path = require('path');
 const ROOT = __dirname;
@@ -26,8 +26,9 @@ const tasks = {
   py: () => py()('-m', 'pytest', 'tests', '-q'),
   js: () => { py()('tests/export_reference.py'); run(process.execPath, ['tests/cross_check.js']); },
   ui: () => { tasks.build(); run(process.execPath, ['tests/ui_sweep.js']); run(process.execPath, ['tests/ui_shots.js']); },
+  rtlsim: () => { py()('tests/export_reference.py'); run(process.execPath, ['tests/rtlsim_check.js']); },
   rtl: () => { const p = py(); p('-m', 'pytest', 'tests/test_rtl.py', '-q'); p('tests/rtl_sim.py'); },
-  all: () => { tasks.py(); tasks.js(); tasks.rtl(); tasks.ui(); console.log('\nall test suites passed'); },
+  all: () => { tasks.py(); tasks.js(); tasks.rtl(); tasks.rtlsim(); tasks.ui(); console.log('\nall test suites passed'); },
   serve: () => {
     const l = python(), port = process.env.PORT || '8000';
     console.log(`Serving web/ at http://localhost:${port}/ (open it in VS Code's Simple Browser). Ctrl+C to stop.`);

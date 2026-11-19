@@ -56,11 +56,22 @@ direct-form-I biquad cascade with saturate/wrap overflow, input headroom and err
 self-checking testbench and a `$readmemh` vectors file. `web/rtl.js` produces byte-identical text, and the
 Quantization tab's Hardware export card offers it for the current design.
 
-**Status: generated, not synthesized, not simulated.** No HDL simulator was available where this was built. An
-independent evaluator executes the generated text and matches the Python simulator bit for bit in the tests, but
-no simulator has run it yet. Install [Icarus Verilog](https://steveicarus.github.io/iverilog/) and run
-`npm run test:rtl` to simulate 8 designs. Interface, latency, accumulator widths and how to simulate:
+**Status: generated, not synthesized, not run in a standard HDL simulator.** No HDL simulator was available where
+this was built. Two interpreters written for this project execute the generated text and match the bit-true
+simulator exactly: `tests/rtl_eval.py` in pytest, and `web/rtlsim.js` in the tests and in the browser. Because the
+generator and both interpreters come from the same project, that agreement is weaker evidence than a third-party
+simulator. Install [Icarus Verilog](https://steveicarus.github.io/iverilog/) and run `npm run test:rtl` to simulate
+8 designs with a standard tool. Interface, latency, accumulator widths and how to simulate:
 [docs/rtl.md](docs/rtl.md). Example: `python examples/rtl_export.py`.
+
+**Simulate hardware (in the browser).** Under the export card, the Quantization tab runs the exported module
+through `web/rtlsim.js`, an interpreter for exactly the SystemVerilog subset the generator emits. It parses the
+module text and runs it one clock at a time with SystemVerilog's signed/unsigned width rules and BigInt values. You
+choose an impulse, step, square, sine or seeded-noise input of 16 to 256 samples, step one clock at a time or run to
+the end, and read every value at the waveform cursor as an integer and as a Qm.n number. A live line reports
+"RTL output vs bit-true model: N of N samples identical", or the first clock where they differ. Anything outside
+the subset is rejected as an "unsupported construct", never guessed. Limits are in
+[docs/rtl.md](docs/rtl.md#in-browser-simulation).
 
 ## Python and JavaScript names
 
@@ -107,6 +118,7 @@ npm run test:py      # pytest: library vs scipy, noise vs theory
 npm run test:js      # export_reference.py, then cross_check.js: JS port vs Python at machine precision
 npm run test:ui      # rebuild index.html, ui_sweep.js (every method x response type meets spec), ui_shots.js
 npm run test:rtl     # RTL export: structure + independent evaluator vs the bit-true simulator; iverilog runs if installed
+npm run test:rtlsim  # web/rtlsim.js: 10 designs vs the Python evaluator and both bit-true models, mutation, SV width rules
 npm run test:all     # all of the above, in order; stops at the first failure
 ```
 

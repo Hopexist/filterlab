@@ -190,3 +190,26 @@ pre.code { max-height: 360px; overflow: auto; background: var(--panel-2); border
 .sub-h { font-size: 15px; margin: 16px 0 4px; }
 .score.plain .row { grid-template-columns: 1fr auto; }
 .score.plain .sub { grid-column: 1 / -1; }
+
+/* Simulate hardware: in-browser interpreter of the generated SystemVerilog */
+.rsim-ctl { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px 16px; }
+.rsim-ctl .field { grid-template-columns: minmax(0, 1fr) 110px; margin-top: 0; }
+.rsim-cmp { margin: 12px 0 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); font-size: 13px; }
+.rsim-cmp.good { border-color: var(--good); } .rsim-cmp.bad { border-color: var(--bad); background: var(--shade); }
+.good { color: var(--good); } .bad { color: var(--bad); }
+.wave { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); overflow: hidden; cursor: crosshair; touch-action: pan-y; }
+.wave svg { display: block; }
+.wave .wl { fill: var(--ink-2); font: 11px ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.wave .wz { stroke: var(--grid); }
+.wave .wclk { fill: none; stroke: var(--ink-3); stroke-width: 1; }
+.wave .wband { fill: var(--grid); }
+.wave .wtr { fill: none; stroke: var(--ink-2); stroke-width: 1.5; }
+.wave .wtr.out { stroke: var(--s2); }
+.wave .wx { fill: var(--shade); stroke: var(--bad); stroke-width: .5; }
+.wave .wbad { fill: var(--bad); opacity: .35; }
+.wave .wcol { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1; }
+.wave-read { margin-top: 8px; font-size: 13px; display: grid; gap: 4px; }
+.wave-read .rds { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.wave-read .nm { font: 12px ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--ink-2); }
+.btn[aria-disabled="true"] { opacity: .5; cursor: default; }
+

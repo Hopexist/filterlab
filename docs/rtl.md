@@ -4,11 +4,12 @@
 synthesizable SystemVerilog module. The module computes exactly what the Python bit-true simulators
 `simulate_fir_fixed` and `simulate_sos_fixed` compute, sample for sample.
 
-> **Status: generated, not synthesized, not simulated.** No HDL simulator was installed where this was built.
-> The arithmetic is checked by an independent evaluator (below); run the generated testbench with
-> [Icarus Verilog](https://steveicarus.github.io/iverilog/) (free) to simulate it yourself. `npm run test:rtl`
-> does this automatically once `iverilog` and `vvp` are on the PATH. No area, timing or Fmax figures are
-> claimed anywhere: no synthesis tool was used.
+> **Status: generated, not synthesized, not run in a standard HDL simulator.** No HDL simulator was installed
+> where this was built. The arithmetic is checked by two interpreters written for this project (below), both in
+> the tests and, for `web/rtlsim.js`, live in the browser. Run the generated testbench with
+> [Icarus Verilog](https://steveicarus.github.io/iverilog/) (free) to simulate it with a standard tool.
+> `npm run test:rtl` does this automatically once `iverilog` and `vvp` are on the PATH. No area, timing or Fmax
+> figures are claimed anywhere: no synthesis tool was used.
 
 ## API
 
@@ -84,7 +85,7 @@ header states the derivation and the numbers.
    declarations, `assign` with `+ - * >>> <<<` and the saturating ternary, sized literals, one `always_ff`
    block) and executes it cycle by cycle with two's-complement width rules and non-blocking register
    updates. It does not import the simulators.
-2. **pytest** (`tests/test_rtl.py`, 19 tests). The evaluator's output equals `simulate_*_fixed` on impulse,
+2. **pytest** (`tests/test_rtl.py`, 22 tests). The evaluator's output equals `simulate_*_fixed` on impulse,
    full-scale step, full-scale square and seeded random input. The cases cover:
    - FIR direct and transposed, saturate and wrap;
    - SOS with headroom and error feedback;
@@ -100,6 +101,12 @@ header states the derivation and the numbers.
    `build/rtl/` and runs `iverilog -g2012` + `vvp`, requiring `PASS`. It is skipped, with a clear message,
    when Icarus Verilog is not installed. **It has not run yet.**
 
+5. **In-browser interpreter** (`web/rtlsim.js`, `npm run test:rtlsim`, 86 checks). It is a second, separately
+   written executor (a parser rather than regexes, but by the same author from the same reading of the standard;
+   see the next section). It runs 10 designs (the 8 above plus an unscaled cascade that really
+   saturates and wraps) on 512 samples each, and its output must equal the Python evaluator's, the Python bit-true
+   model's and the JS bit-true model's. A one-bit flip of one coefficient literal must be detected.
+
 What this does not prove: that a real simulator or synthesis tool accepts every construct. The subset is
 deliberately plain (IEEE 1800 `logic`, `always_ff`, `>>>`, sized signed literals), but it is unconfirmed until
 `npm run test:rtl` runs with iverilog installed.
@@ -114,7 +121,59 @@ vvp cheby1_lp.vvp                          # "cheby1_lp: 512 vectors, 0 mismatch
 ```
 
 In the app, the Quantization tab's **Hardware export** card gives the same module for the current design and
-settings, plus a testbench and vectors file to download.
+settings, plus a testbench and vectors file to download. **Simulate hardware** under it runs that module in the
+browser (see [In-browser simulation](#in-browser-simulation)).
+
+## In-browser simulation
+
+The Quantization tab's **Simulate hardware** panel runs the module that the Hardware export card shows, using
+`web/rtlsim.js`. That file is an interpreter for exactly the subset `dsp/rtl.py` and `web/rtl.js` emit. It parses
+the generated text, not the design parameters: a hand edit to the text changes what it simulates.
+
+**Supported subset.**
+- `module name (...)` with `input|output logic [signed] [N:0] name` ports.
+- Declarations: `logic [signed] [N:0] a, b;`, with ranges written `[N:0]`.
+- `assign w = expr;`
+- One `always_ff @(posedge clk)` block containing `begin`/`end`, `if`/`else` and non-blocking `r <= expr;`.
+- Expressions: identifiers, sized literals `N'sdV`, `N'dV` and `N'bB`, unsized decimals, `'0`, unary `+` and `-`,
+  binary `*`, `+`, `-`, `<<<`, `>>>`, `<` and `>`, parentheses and `?:`.
+- `//` comments.
+
+Anything else is rejected with "unsupported construct: ..." and its line number. That includes `/`, `==`, bit
+selects, concatenation, `wire` and other reserved words, plain `always`, `initial`, system tasks, unsized literals
+that do not fit 32 bits, a second driver, an undeclared name and a
+combinational loop.
+
+**Rules it applies** (IEEE 1800-2017, 11.6 to 11.8).
+- An expression is signed only if all of its context-determined operands are signed.
+- The context width is the larger of the left-hand side's width and the widest operand.
+- Operands are converted to the expression's type, then extended, with sign extension only when that type is
+  signed.
+- Each `+`, `-`, `*` and `<<<` wraps to the context width. `>>>` is arithmetic when the expression is signed and
+  logical when it is unsigned.
+- Shift amounts and conditions are self-determined. `<` and `>` compare at the wider operand's width and give a
+  1-bit unsigned result.
+- Assignment truncates to the left-hand side's width.
+- Continuous assigns are evaluated in dependency order. Register updates are non-blocking: every right-hand side
+  is read before any register changes.
+- All values are BigInt, so the result is exact at any width (tested with a 60-bit accumulator).
+
+**What the panel does.**
+- Reset applies one clock with `rst` high. Each later clock sets `in_valid = 1` and the next input sample.
+- The waveform shows true register timing: `out_data` changes at the rising edge that ends each clock, one clock
+  after its input.
+- The comparison is with this tab's bit-true model (`firFixedSim`/`sosFixedSim`), computed live.
+
+**Limits.**
+- It is not a general SystemVerilog simulator. It has no event scheduler, no `#` delays, and no X/Z bit
+  semantics. A register is X until it is assigned, and any X operand makes the whole result X; that is a
+  conservative stand-in for 4-state logic. A real simulator can be less pessimistic: `c ? 4 : 4` with c = X gives 4 there, X here.
+- It models one clock and treats each step as one rising edge.
+- The interpreter and the generator were written by the same project from the same reading of the standard. If
+  both misread a rule the same way, they agree with each other and can still be wrong. The Python evaluator, the
+  bit-true models and the mutation test do not remove that risk.
+- What would close the gap is any standard HDL simulator running `npm run test:rtl` (Icarus Verilog, Verilator or
+  a commercial tool), plus a synthesis run for anything about area or timing.
 
 ## Hardware cost report (counts only)
 

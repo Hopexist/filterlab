@@ -137,6 +137,7 @@ function niceTicks(lo, hi, target) {
   return t;
 }
 const fmtHz = f => Math.abs(f) >= 1000 ? (f / 1000).toFixed(Math.abs(f) % 1000 === 0 ? 0 : 2).replace(/0$/, '') + 'k' : String(Math.round(f * 10) / 10);
+const unitSplit = t => { const m = /^(-?[\d.]+(?:e[-+]?\d+)?) (.+)$/i.exec(String(t)); return m ? `${m[1]} <span class="u">${m[2]}</span>` : /^-?[\d.]/.test(String(t)) ? String(t) : `<span class="txt">${t}</span>`; };   // display only: '0.826 dB' -> big number, small unit
 const fmtN = (v, d = 2) => Number.isFinite(v) ? (Math.round(v * Math.pow(10, d)) / Math.pow(10, d)).toString() : '—';
 let uid = 0;
 const SERIES_COLORS = ['var(--s1)', 'var(--s2)', 'var(--ink-3)'];
@@ -298,7 +299,7 @@ function renderResponse(d) {
 function padRange(a) { const f = a.filter(Number.isFinite); let lo = Math.min(...f), hi = Math.max(...f); if (hi - lo < 1e-9) { lo -= 1; hi += 1; } const p = (hi - lo) * 0.08; return [lo - p, hi + p]; }
 
 function scoreHtml(d) {
-  const st = state, row = (ok, lab, val, sub) => `<div class="row"><span class="ic ${ok ? 'ok' : 'no'}" aria-hidden="true">${ok ? '✓' : '✕'}</span><span class="lab">${lab}</span><span class="val num">${val}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
+  const st = state, row = (ok, lab, val, sub) => `<div class="row"><span class="ic ${ok ? 'ok' : 'no'}" aria-hidden="true">${ok ? '✓' : '✕'}</span><span class="lab">${lab}</span><span class="val num">${unitSplit(val)}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
   const gdPass = (() => { const f = Array.from(d.gd.f), g = Array.from(d.gd.gd); let mn = Infinity, mx = -Infinity; d.bands.filter(b => b.type === 'pass').forEach(b => f.forEach((ff, i) => { if (ff >= b.lo && ff <= b.hi && Number.isFinite(g[i])) { mn = Math.min(mn, g[i]); mx = Math.max(mx, g[i]); } })); return [mn, mx]; })();
   const gdTxt = d.kind === 'fir' ? `Constant delay of ${fmtN((d.taps - 1) / 2, 1)} samples (${fmtN((d.taps - 1) / 2 / st.fs * 1000, 2)} ms): linear phase.` : `Delay varies ${fmtN(gdPass[0], 1)} to ${fmtN(gdPass[1], 1)} samples across the passband.`;
   return `<div class="score">
@@ -694,7 +695,7 @@ function renderQuant(d) {
 }
 function focusRestore(id) { const el = document.getElementById(id); if (el) el.focus(); }
 function quantScore(d, qa) {
-  const st = state, lsb = Math.pow(2, -qa.fmt.fracBits), row = (ok, lab, val, sub) => `<div class="row"><span class="ic ${ok ? 'ok' : 'no'}" aria-hidden="true">${ok ? '✓' : '✕'}</span><span class="lab">${lab}</span><span class="val num">${val}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
+  const st = state, lsb = Math.pow(2, -qa.fmt.fracBits), row = (ok, lab, val, sub) => `<div class="row"><span class="ic ${ok ? 'ok' : 'no'}" aria-hidden="true">${ok ? '✓' : '✕'}</span><span class="lab">${lab}</span><span class="val num">${unitSplit(val)}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
   const stopOk = qa.alive && qa.m.atten >= st.rs - 0.01, ripOk = qa.alive && qa.m.ripple <= st.rp * 1.0005 + 1e-6;
   let h = '<div class="score">';
   h += row(qa.stable, 'Stability', qa.stable ? 'Stable' : 'Unstable', d.kind === 'fir' ? 'FIR filters cannot go unstable.' : `Largest pole radius ${fmtN(qa.maxR, 4)}`);

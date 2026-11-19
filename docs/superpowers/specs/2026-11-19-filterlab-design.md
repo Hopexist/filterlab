@@ -1,160 +1,196 @@
 # Filterlab — design
 
-Date: 2026-11-19. Status: draft for approval.
+Date: 2026-11-19. Status: revision 2, for approval.
 
 ## Intent
 
-Filterlab is a digital filter design toolkit: a Python reference library (`dsp/`) and a
-self-contained interactive web app (`web/index.html`) that ports the same maths line for line.
-You design a filter, see whether it meets spec, and see what happens when the coefficients
-and arithmetic go fixed-point.
+Filterlab is a digital filter design toolkit: a numpy-only Python library (`dsp/`) and a
+self-contained web app (`web/index.html`) whose `web/dsp.js` is a line-for-line port of it.
+It is a portfolio and learning project for an EE student heading toward signal processing and
+hardware: DSP rigour, verification and clear theory come before feature count (from `CLAUDE.md`).
 
-The original code (described as "already verified") was not available, so it is rebuilt from
-scratch here (owner's decision, 2026-11-19), then extended with tasks A–D.
+The existing code (from `filterlab.zip`, committed untouched as 4b15f49) is the baseline.
+It is not rewritten. Work proceeds in the order 0, A, B, C, D, each with its own short
+plan, green tests and a commit.
+
+## Baseline as found (2026-11-19, Windows 11, Python 3.12.10, Node 26.13.0)
+
+| Command (as written in `CLAUDE.md`) | Result |
+|---|---|
+| `pytest tests -q` | pass, 31 tests |
+| `python tests/export_reference.py` | pass; rewrites `tests/reference.json` with differences up to 1.6e-15 from the committed copy (numpy build noise) |
+| `node tests/cross_check.js` | pass, 56 checks |
+| `node tests/ui_sweep.js` | **fail**: `Cannot find module 'playwright'`; also hard-codes `/usr/bin/google-chrome` |
+| `node tests/ui_shots.js` | **fail**: same `Cannot find module 'playwright'`; same hard-coded Chrome path |
+
+Problems found while reading (not fixed yet):
+- `ui_sweep.js` / `ui_shots.js` build the page URL as `'file://' + process.cwd() + '/web/index.html'`,
+  which breaks on Windows (backslashes, the space in `Code DEV`); they never create `shots/`;
+  `ui_sweep.js` exits 0 even when designs miss spec or the console logs errors;
+  `ui_shots.js` only shoots 1440 px wide.
+- README uses `python3` (the Microsoft Store stub here, which fails) and `&&`.
+- No `package.json`, no single test command.
+- JS/Python drift: `firNoiseTheory` defaults `inputQuantized=false` (Python `True`);
+  `sosNoiseTheory` has no `inputQuantized` (always false); JS `toInt` has no `overflow`
+  argument (Python has saturate and wrap). The cross-check only exercises the false path.
+- `cross_check.js` uses absolute tolerances only and never compares IIR poles or zeros.
 
 ## Goals
 
-- Baseline: the features listed under "What exists" in the brief, with the three test suites.
-- A: UI/UX pass (critique first), collapsible controls, one-handed phone layout, compare mode,
-  plain-language captions plus a DF-I signal-flow diagram on the Quantization tab.
-- B: even-length Parks-McClellan (type II), Hilbert transformer and differentiator (types III/IV),
-  elliptic IIR with min_order, overflow modes (saturate/wrap) and a scaling-headroom control,
-  error-feedback noise shaping compared with theory.
-- C: time-domain demo: tones+noise or an uploaded WAV, input/output spectra, float vs quantized,
-  optional Web Audio playback.
-- D: README, `docs/theory.md`, regenerated `examples/gallery.png`.
+- **0. Windows/VS Code port only.** No DSP or UI behaviour changes.
+- **A.** UI/UX critique first (ui-ux-pro-max, impeccable), then: grouped and collapsible controls
+  panel, one-handed phone layout (<= 480 px), compare mode, plain-language captions on the
+  Quantization tab, a DF-I signal-flow diagram (diagram-design) with the rounding point marked.
+- **B.** Even-length Parks-McClellan (type II), Hilbert and differentiator (types III/IV),
+  elliptic IIR with `min_order`, overflow modes (saturate/wrap) with a headroom control,
+  error-feedback rounding compared with theory.
+- **C.** Time-domain demo: tones + noise or an uploaded WAV, input/output spectra, float vs
+  quantized, optional Web Audio playback.
+- **D.** README (including the JS/Python name mapping table), `docs/theory.md`, regenerated
+  `examples/gallery.png`.
 
-## Non-goals
+## Non-goals and anti-goals
 
-- No dependencies beyond numpy in `dsp/` (scipy is test-only). No npm packages at all.
-- No server-side anything; no network at runtime; no CDN.
-- No multirate, adaptive filters, or arbitrary-response FIR (frequency sampling) design.
-- Not matching scipy's API names; matching scipy's *results* is what the tests check.
+Non-goals: new dependencies (numpy in `dsp/`; scipy only in tests and the noise-theory helpers
+that already use it; no npm packages), runtime network or CDN, multirate or adaptive filters.
 
-## Anti-goals (a failure even if it works)
+Failures even if everything "works": Python and JS drifting; the UI reporting a design meets spec
+when it does not; a test command that passes when it should fail (as `ui_sweep.js` does today);
+anything that only runs in bash or only on Linux; losing visible focus or usability at 390 px.
 
-- Python and JS disagreeing beyond machine precision on any shared function.
-- A design the UI reports as meeting spec that does not.
-- A UI that is unusable at 390 px wide or loses visible keyboard focus.
-- Test or build commands that only work in bash, or only on Linux.
+## Constraints
 
-## Constraints (from the owner, verbatim where it matters)
-
-- Runs on the owner's Windows machine in VS Code; must also work on macOS/Linux.
-- Python launcher detected (try `python`, then `py -3`, then `python3`; first one that imports
-  numpy wins). On this machine `python3` is the Microsoft Store stub and fails; `python` works.
-  The choice is written into README.
-- No `&&` chaining in scripts or docs. `package.json` scripts `test:py`, `test:js`, `test:ui`,
+- Python launcher detected once, in order `python`, `py -3`, `python3`; first that imports numpy
+  wins (here: `python`; `python3` is the Store stub). README records the choice.
+- No `&&` in scripts or docs. `package.json` scripts `test:py`, `test:js`, `test:ui`,
   `test:all`; `run_tests.js` runs them in sequence.
-- File URLs via `url.pathToFileURL(path.resolve(...))`. Forward slashes in code paths.
-  No POSIX-only tools (rm, zip, sed) in scripts: use Node `fs`.
-- Browser driver finds Edge/Chrome via `EDGE_PATH` / `CHROME_PATH`, then common install
-  locations on Windows, macOS, Linux; clear error if none. (Here: Edge at
-  `C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe`; no Chrome, no Playwright.)
-- `npm run serve` for VS Code Simple Browser; screenshots to `shots/`.
-- `web/index.html` self-contained; tabular numerals; visible focus; `prefers-reduced-motion`;
-  chart colours #2a78d6 (design A / primary) and #eb6834 (design B / secondary).
-- Python first with a pytest, then JS port, then cross-check, for every DSP change.
-- Ask the owner before changing a public `dsp/` function signature.
+- File URLs via `url.pathToFileURL(path.resolve(...))`; forward slashes in code paths; Node `fs`
+  instead of `rm`/`zip`/`sed`.
+- Browser from `EDGE_PATH` or `CHROME_PATH`, then common Windows/macOS/Linux install locations,
+  else a clear error. (Here: Edge at `C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe`.)
+- `npm run serve` for VS Code's Simple Browser; screenshots to `shots/`.
+- Never edit `web/index.html` by hand; rebuild with `web/build.py`.
+- Colours: `#2a78d6` = floating point / ideal, `#eb6834` = quantized (CVD-validated, per
+  `CLAUDE.md`). Tabular numerals, visible focus, `prefers-reduced-motion`, both themes.
+- Python first with a failing pytest, then the JS port, then `cross_check.js`, for every DSP change.
 
 ## Approaches considered
 
-1. **Browser automation: zero-dependency DevTools-protocol driver (chosen).** Node 26 has a
-   global `WebSocket`; spawn Edge/Chrome headless with `--remote-debugging-port=0`, read
-   `DevToolsActivePort`, drive with `Runtime.evaluate`, `Page.captureScreenshot`,
-   `Emulation.setDeviceMetricsOverride`. ~150 lines, no installs.
-   Rejected: `playwright-core` (an npm install, against the no-install rule); the
-   chrome-devtools MCP (not runnable as a test command).
-2. **JS port shape: same function names as Python, snake_case (chosen)** so a grep for
-   `remez` finds both sides. Rejected: idiomatic camelCase (breaks the one-to-one mapping).
-3. **Build order: baseline then A→D, each its own plan and commit (chosen).** Rejected: folding
-   B's DSP into the baseline (loses the "commit after each task" history the brief asks for).
+1. **Browser tests: zero-dependency DevTools-protocol driver (chosen; required by `CLAUDE.md`).**
+   Spawn Edge/Chrome with `--headless=new --remote-debugging-port=0 --user-data-dir=<temp>`, read
+   `DevToolsActivePort`, talk over Node's built-in `WebSocket`. The driver exposes the few calls the
+   two scripts use (goto, evaluate, click, mouse drag, set viewport and colour scheme, screenshot,
+   collect console errors). Rejected: `playwright-core` (npm install).
+2. **Serve: `npm run serve` -> `run_tests.js serve` -> `<python> -m http.server` on `web/` (chosen)**,
+   reusing the launcher detection. Rejected: a separate Node static server (one more file to keep).
+3. **Order: 0 then A to D, one plan each (chosen, per `CLAUDE.md` roadmap).**
 
-## Architecture
+## Task 0: Windows/VS Code port (details)
+
+- `tests/browser.js` (driver, as above); `ui_sweep.js` and `ui_shots.js` ported onto it with the
+  same checks, plus: non-zero exit on any missed spec, failed interaction check or console error;
+  `shots/` created with `fs.mkdirSync(..., {recursive: true})`; shots in light and dark at 1440
+  and 390 px.
+- `package.json` + `run_tests.js` (launcher detection, `py`/`js`/`ui`/`all`/`serve`/`build`).
+  `test:js` runs `export_reference.py` then `cross_check.js`.
+- `cross_check.js` hardening:
+  - mixed tolerance everywhere: pass when `|js - py| <= atol + rtol * |py|` element-wise, with
+    `rtol = 1e-9` and `atol = 1e-12` by default (tighter per check where it already is, e.g. exact
+    integer results stay at 0);
+  - IIR zeros and poles compared from the design's own `z`/`p` (computed analytically from the
+    prototype and band transform), never by root-finding `b` or `a`: repeated roots (e.g. the
+    Butterworth low-pass's zeros all at z = -1) are ill-conditioned for root finders. Match as
+    multisets: sort by (real, imag) after rounding to 1e-9, then the mixed tolerance.
+- README: commands without `python3` or `&&`, the detected launcher, and `npm` scripts.
+- `tests/reference.json` stays committed; `test:js` regenerates it, so run-to-run diffs around
+  1e-15 are expected and are not committed unless the cases change.
+
+## Task B details
+
+**Public signature changes (approved by the owner 2026-11-19; keyword-only, existing names kept,
+coefficient and signal formats stay separate arguments):**
+
+1. `remez(numtaps, bands, desired, weight=None, fs=2.0, grid_density=20, maxiter=80, tol=1e-9, return_info=False, *, kind="bandpass")`.
+   `numtaps` may be even. `kind` in {"bandpass", "hilbert", "differentiator"}.
+   Even `numtaps` with "bandpass" = type II; a band with non-zero gain at Nyquist then raises
+   `ValueError` saying type II has a forced zero at fs/2. "hilbert"/"differentiator" give
+   type III (odd) or IV (even). Checked against `scipy.signal.remez(..., type=...)`.
+2. `design_iir(kind="ellip", ...)` and `min_order(kind="ellip", ...)`: a new value of the existing
+   `kind` argument (uses the existing `rp` and `rs`). Jacobi elliptic functions by descending
+   Landen / AGM; order from the degree equation. Checked against `scipy.signal.ellip` / `ellipord`.
+3. `simulate_fir_fixed(h, x, coef_fmt, sig_fmt, *, overflow="saturate")`.
+4. `simulate_sos_fixed(sos, x, coef_fmt, sig_fmt, *, overflow="saturate", headroom_bits=0, error_feedback=False)`.
+5. `sos_noise_theory(sos, sig_fmt, input_quantized=True, *, error_feedback=False)`.
+
+JS mirrors each with an options object, e.g. `sosFixedSim(sos, x, coefFmt, sigFmt, rounding, {overflow, headroomBits, errorFeedback})`.
+The JS drift listed above (noise-theory defaults, `toInt` overflow) is fixed in B, where those
+functions change anyway, and the cross-check then covers both paths.
+
+**Overflow.** `"saturate"` clamps each section output (as now); `"wrap"` applies two's-complement
+wrap with the existing `to_int` rule. **Headroom:** the input is shifted right by `headroom_bits`
+before the first section (fewer overflow events, `headroom_bits` x 6.02 dB less SNR); the caller
+multiplies the output by `gain * 2**headroom_bits`. UI slider 0 to 6 bits.
+
+**Error feedback: sign convention (pinned).** For a section with denominator row
+`[1, a1, a2]` (A(z) = 1 + a1 z^-1 + a2 z^-2) and integer feedback coefficients
+`c1 = round(a1)`, `c2 = round(a2)`:
 
 ```
-dsp/            numpy-only reference
-  fir.py        window design (Kaiser + classic windows), kaiser order estimate,
-                remez (Parks-McClellan), PM order estimate (Herrmann)
-  iir.py        analog prototypes (butter, cheby1, cheby2, ellip), lp->lp/hp/bp/bs,
-                bilinear with prewarp, zpk -> SOS pairing, min_order per family
-  analysis.py   freqz, group delay, roots, spec check (passband ripple / stopband atten)
-  quant.py      Qm.n quantize, per-section peak scaling (L-inf of section-input transfer),
-                bit-true FIR and SOS (DF-I) simulation, round-off noise theory
-  signal.py     (task C) test-signal generator, FFT spectrum helper
-web/
-  dsp.js        line-for-line port; works in the browser and under `require` in Node
-  app.js        UI; canvas plots; no framework
-  style.css     tokens on :root, dark theme via prefers-color-scheme + [data-theme]
-  index.src.html  template; build.py inlines css+js -> index.html
-  build.py
-tests/
-  test_*.py               pytest vs scipy
-  export_reference.py     runs dsp/ on fixed cases -> tests/ref/*.json
-  cross_check.js          runs dsp.js on the same cases, max rel err <= 1e-9
-  browser.js              DevTools-protocol driver (find browser, launch, eval, screenshot)
-  ui_sweep.js             every method x response type in the real page must meet spec
-  ui_shots.js             light/dark x 1440/390 screenshots -> shots/
-tools/serve.js            tiny static file server for `npm run serve`
-run_tests.js, package.json
+acc'[n] = acc[n] - c1 * r[n-1] - c2 * r[n-2]
+y[n]    = (acc'[n] + half) >> sh
+r[n]    = acc'[n] - (y[n] << sh)          # the part rounding threw away, in accumulator LSBs
 ```
 
-Methods x responses in the sweep: {Kaiser window, Parks-McClellan, Butterworth, Chebyshev I,
-Chebyshev II} x {lowpass, highpass, bandpass, bandstop} = 20 (24 once elliptic lands in B).
-Even-length PM and Hilbert/differentiator are added to the sweep in B as extra cases.
+So the section's rounding noise reaches its output through `N(z) / A(z)` with
+`N(z) = 1 + c1 z^-1 + c2 z^-2`, which nearly cancels A(z) for poles near z = 1. Theory: as today,
+with each section's `[1]` numerator for its own rounding replaced by `N(z)`.
 
-## Decisions on the details (builder's calls, owner may override)
+Tests (pytest, then cross-check):
+- `test_error_feedback_reduces_lowpass_noise`: Butterworth low-pass, order 4, edge 0.02 x fs,
+  scaled and quantized with 24-bit coefficients, Q0.15 signal; measured output noise with
+  `error_feedback=True` is at least 6 dB below without it.
+- `test_error_feedback_matches_theory`: the measured noise with error feedback is within 1.5 dB of
+  `sos_noise_theory(..., error_feedback=True)`. Because theory uses `N(z) = 1 + c1 z^-1 + c2 z^-2`,
+  this also fails if the implementation's sign is flipped (that gives `1 - c1 z^-1 - c2 z^-2`,
+  several dB worse), which pins the convention.
 
-- Collapsible controls: native `<details>` groups — Response, Method, Specs, Arithmetic,
-  Export. Only Response + Specs open by default, so the panel fits a 768 px-tall viewport.
-- Phone (<=480 px): single column; tab bar fixed at the bottom (thumb reach); controls in a
-  collapsible sheet above the chart; band-edge drag tabs get 44 px hit areas.
-- Compare mode: "Pin as B" snapshots the current design; B is drawn dashed in #eb6834 over A
-  (solid #2a78d6) with a legend; "Clear B" removes it. Only the magnitude plot overlays.
-- Quantization captions: one or two sentences under each chart, plain language.
-- Signal-flow diagram: inline SVG (theme-aware via CSS variables) of one DF-I biquad, the
-  single rounding point (after the accumulator, before the delay line) marked, with the
-  error-feedback path drawn dashed when that option is on. Built with diagram-design guidance.
-- Overflow: `wrap` = two's-complement wrap of the accumulator result; `saturate` = clamp.
-  Headroom slider: 0–6 bits of extra scaling below the peak-scaling choice.
-- Error feedback: second-order error feedback with integer coefficients (round(-a1), round(-a2)
-  in the section's own fixed-point format) fed back before the rounding; theory = white
-  rounding noise q^2/12 shaped by (1 + c1 z^-1 + c2 z^-2) times the section-to-output
-  response. Test: simulated output noise power within 1 dB of theory.
-- Elliptic: Jacobi elliptic functions via descending Landen / AGM (Orfanidis' method);
-  min_order from the degree equation. Checked against scipy.signal.ellip/ellipord.
-- Type II/III/IV PM: standard reduction to type I by a fixed factor cos(w/2), sin(w), sin(w/2)
-  (Parks-McClellan / McClellan-Parks-Rabiner). Checked against scipy.signal.remez.
-- WAV upload: PCM 16/24-bit and float32, mono or stereo (mixed to mono), length capped at
-  10 s, every header field bounds-checked. Playback gain clamped and starts silent.
-- Export: coefficients as C arrays and Python lists, numbers formatted by the code itself
-  (never user-supplied text interpolated). Clipboard through `navigator.clipboard.writeText`,
-  with a select-the-textarea fallback when it is unavailable (file://).
+## Task A details (builder's calls; owner may override)
 
-## Public signatures that tasks B/C will extend (needs owner approval)
+- Controls in native `<details>` groups (Response, Method, Specs, Arithmetic, Export); Response and
+  Specs open by default so the panel fits a 768 px-tall viewport.
+- Phone (<= 480 px): single column, tab bar fixed at the bottom, controls collapsible above the
+  chart, drag tabs with 44 px hit areas.
+- Compare mode: "Pin as B" snapshots the current design; B is drawn **dashed in a neutral ink token**
+  (both themes), not in `#eb6834`, because that colour means "quantized"; legend "A current, B pinned";
+  the hover readout and data table include both. Magnitude plot only.
+- Quantization captions: one or two plain sentences under each chart.
+- Signal-flow diagram: inline, theme-aware SVG of one DF-I biquad with the single rounding point
+  marked (after the accumulator, before the output delays); the error-feedback path is drawn dashed
+  and appears once B adds that option.
 
-All additive, keyword-only, with defaults that keep existing behaviour:
+## Task C details
 
-- `remez(numtaps, bands, desired, weight=None, *, kind="bandpass")` — `numtaps` may be even;
-  `kind` in {"bandpass", "hilbert", "differentiator"}.
-- `design_iir(..., family)` gains the value `"ellip"` (new value, not a new parameter) and
-  `min_order(...)` gains `"ellip"`.
-- `simulate_sos(x, sos_q, fmt, *, overflow="saturate", headroom_bits=0, error_feedback=False)`
-  and `simulate_fir(x, h_q, fmt, *, overflow="saturate")`.
-- `roundoff_noise(sos, fmt, *, error_feedback=False)`.
+Test signal: sum of tones plus white noise, seeded. WAV upload: PCM 16/24-bit and float32, mono or
+stereo (mixed to mono), at most 10 s, every header field bounds-checked, and a plain error message
+when the file is not one of these. Spectra via FFT in `dsp/` (numpy) and `dsp.js` (ported and
+cross-checked). Float vs quantized: same cascade through `simulate_sos_fixed`/`simulate_fir_fixed`.
+Playback: Web Audio, gain clamped, starts muted, stops on tab change.
 
-## Settled during the builder check (builder's calls)
+## Task D details
 
-- Units: band edges in Hz with a sample-rate field (default 48 kHz); specs as passband ripple
-  Rp (default 1 dB) and stopband attenuation Rs (default 60 dB).
-- "Meets spec" = max passband deviation <= Rp and min stopband attenuation >= Rs on a dense
-  grid (8192 points), excluding transition bands.
-- Order estimates (Kaiser, Herrmann) can undershoot; the app and `auto_order` step the order up
-  until the design meets spec (capped at 400 taps FIR, 30 IIR), and say so if the cap is hit.
-- Cross-check tolerance: relative error <= 1e-9 for coefficients and responses; roots compared
-  after sorting, <= 1e-7.
+`docs/theory.md`, short derivations of:
+- the order estimates (Kaiser, Herrmann/Remez, the analog-prototype orders, elliptic degree equation);
+- the noise model (q^2/12 per rounding, shaped by 1/A_k(z) and the remaining sections; error feedback's N(z));
+- **the scaling definition, stated exactly: each biquad is scaled to unit peak gain of its own
+  transfer function, max over w of |B_k(e^jw) / A_k(e^jw)| = 1, and the leftover gain is applied
+  once at the output** (what `scale_sos` does), and why this choice (per-section L-infinity, not
+  cumulative L2) was made.
+
+README: the JS/Python name mapping table (Python snake_case, JS camelCase, e.g.
+`simulate_sos_fixed` / `sosFixedSim`, `measure_lowpass` / `measure`), commands, launcher.
+`examples/gallery.png` regenerated with `examples/demo.py`.
 
 ## Left to the builder
 
-Internal helper names, plot drawing code, exact CSS values within the tokens, test-case
-selection beyond the ones named, and the exact copy of captions (plain language, short).
+Internal helper names, drawing code, CSS values within the tokens, extra test cases beyond those
+named, exact caption copy (plain language, short).

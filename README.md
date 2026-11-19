@@ -48,6 +48,20 @@ y = simulate_sos_fixed(sq, x, fmt, QFormat(0, 15), overflow="wrap", headroom_bit
 
 Conventions: edges are in Hz (pass `fs`), `sos` rows are `[b0 b1 b2 1 a1 a2]`, Qm.n means 1 sign bit + m integer bits + n fraction bits.
 
+## Hardware export (SystemVerilog)
+
+`dsp/rtl.py` turns a quantized design into a synthesizable SystemVerilog module whose output matches the bit-true
+simulators (`simulate_fir_fixed`, `simulate_sos_fixed`) sample for sample: FIR in direct or transposed form, IIR as a
+direct-form-I biquad cascade with saturate/wrap overflow, input headroom and error feedback. It also writes a
+self-checking testbench and a `$readmemh` vectors file. `web/rtl.js` produces byte-identical text, and the
+Quantization tab's Hardware export card offers it for the current design.
+
+**Status: generated, not synthesized, not simulated.** No HDL simulator was available where this was built. An
+independent evaluator executes the generated text and matches the Python simulator bit for bit in the tests, but
+no simulator has run it yet. Install [Icarus Verilog](https://steveicarus.github.io/iverilog/) and run
+`npm run test:rtl` to simulate 8 designs. Interface, latency, accumulator widths and how to simulate:
+[docs/rtl.md](docs/rtl.md). Example: `python examples/rtl_export.py`.
+
 ## Python and JavaScript names
 
 `web/dsp.js` is a line-for-line port of `dsp/`, cross-checked by `tests/cross_check.js`. Python names are
@@ -92,6 +106,7 @@ Needs Python 3 with numpy and scipy, Node 22 or newer, and Edge or Chrome. No np
 npm run test:py      # pytest: library vs scipy, noise vs theory
 npm run test:js      # export_reference.py, then cross_check.js: JS port vs Python at machine precision
 npm run test:ui      # rebuild index.html, ui_sweep.js (every method x response type meets spec), ui_shots.js
+npm run test:rtl     # RTL export: structure + independent evaluator vs the bit-true simulator; iverilog runs if installed
 npm run test:all     # all of the above, in order; stops at the first failure
 ```
 

@@ -8,3 +8,4 @@
 - 07:16Z task A done: grouped controls, phone layout, compare mode, captions, DF-I diagram; all suites green (18 shots reviewed).
 - 07:20Z task D done: README (mapping table, launcher), docs/theory.md, gallery regenerated; all suites green.
 - 07:25Z task C done (stretch): Signal tab, spectra, WAV upload, playback; 69 pytest, 181 cross-checks, all UI checks, 24 shots.
+- 07:32Z review fixes (browser driver robustness, Signal cache key); all suites green; STATUS.md written. Run ends.

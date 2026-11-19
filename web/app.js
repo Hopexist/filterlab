@@ -34,7 +34,7 @@ const state = {
   q: { coef: 12, sig: 16, round: 'nearest', struct: 'sos', overflow: 'saturate', headroom: 0, ef: false },
 };
 let pinB = null;
-const sig = { source: 'tones', wav: null, name: '', error: '', vol: 0 };   // Signal tab: source, loaded WAV, volume (starts muted)
+const sig = { source: 'tones', wav: null, name: '', error: '', vol: 0, loads: 0 };   // Signal tab: source, loaded WAV, volume (starts muted)
 let audio = { ctx: null, src: null }, sigMemo = { key: '', out: null };   // compare mode: a snapshot of the magnitude response of a pinned design
 let drawn = false, current = null, focusKey = null, renderQueued = false, fastMode = false;
 
@@ -409,7 +409,7 @@ function play(y, fs) {
 }
 function signalRun(d, st) {
   const q = st.q, wav = sig.source === 'wav' && sig.wav;
-  const key = JSON.stringify([d.title, d.size, st.fs, st.edges, st.rp, st.rs, q, sig.source, sig.name, wav ? wav.x.length : 0]);
+  const key = JSON.stringify([d.title, d.size, st.fs, st.edges, st.rp, st.rs, q, sig.source, sig.loads]);   // every upload is a new signal, even with the same name and length
   if (sigMemo.key === key) return sigMemo.out;
   const fs = st.fs, x = wav ? wav.x : D.toneSignal(16384, fs, [[0.03 * fs, 0.25], [0.11 * fs, 0.25], [0.3 * fs, 0.25]], 0.02, 7);
   const sigFmt = D.qFormat(0, q.sig - 1), out = { x, fs, notes: [] };
@@ -457,7 +457,7 @@ function renderSignal(d) {
     if (f.size > 64 * 1024 * 1024) sig.error = 'That file is larger than 64 MB. A 10 s WAV is far smaller; trim it and try again.';
     else try {
       const w = D.parseWav(await f.arrayBuffer());
-      sig.wav = w; sig.name = f.name; sig.source = 'wav';
+      sig.wav = w; sig.name = f.name; sig.source = 'wav'; sig.loads++;
       if (w.fs !== state.fs) { const k = w.fs / state.fs; state.edges = state.edges.map(x => Math.round(x * k)); state.fs = w.fs; syncControls(); }
     } catch (err) { sig.error = `Could not read ${f.name}. ${err.message}`; }
     render();

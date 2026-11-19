@@ -40,25 +40,33 @@ async function launch({ width = 1440, height = 1000 } = {}) {
     '--no-default-browser-check', '--disable-extensions', '--hide-scrollbars', '--force-color-profile=srgb', 'about:blank'], { stdio: 'ignore' });
   const kill = () => { try { child.kill(); } catch (_) { /* already gone */ } };
   process.on('exit', kill);
+  const cleanupDir = async () => { for (let i = 0; i < 10; i++) { try { fs.rmSync(dir, { recursive: true, force: true }); return; } catch (_) { await sleep(100); } } };
+  const fail = async err => { process.off('exit', kill); kill(); await cleanupDir(); throw err; };
 
   // DevToolsActivePort: line 1 = port, line 2 = browser websocket path
   const portFile = path.join(dir, 'DevToolsActivePort'); let wsUrl = null;
   // the Windows launcher process may exit 0 at once and hand off to the real browser, so only the file counts
   for (let i = 0; i < 300 && !wsUrl; i++) {
-    try { const [port, p] = fs.readFileSync(portFile, 'utf8').trim().split('\n'); if (port && p) wsUrl = `ws://127.0.0.1:${port}${p}`; } catch (_) { await sleep(50); }
+    try { const [port, p] = fs.readFileSync(portFile, 'utf8').trim().split('\n'); if (port && p) wsUrl = `ws://127.0.0.1:${port}${p}`; } catch (_) { /* not written yet */ }
+    if (!wsUrl) await sleep(50);   // also when the file exists but is still half-written
   }
-  if (!wsUrl) { kill(); throw new Error(`Browser did not open a DevTools port within 15 s (${exe}). Set EDGE_PATH or CHROME_PATH to a working Edge/Chrome.`); }
+  if (!wsUrl) return fail(new Error(`Browser did not open a DevTools port within 15 s (${exe}). Set EDGE_PATH or CHROME_PATH to a working Edge/Chrome.`));
 
   const ws = new WebSocket(wsUrl);
-  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('Could not connect to the browser DevTools socket.')); });
-  let nextId = 1; const pending = new Map(), listeners = [];
+  try { await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('Could not connect to the browser DevTools socket.')); }); }
+  catch (e) { return fail(e); }
+  let nextId = 1, closed = false; const pending = new Map(), listeners = [];
+  ws.onclose = () => { closed = true; for (const { rej } of pending.values()) rej(new Error('The browser closed the DevTools connection (did it crash?).')); pending.clear(); };
   ws.onmessage = ev => {
     const m = JSON.parse(ev.data);
     if (m.id && pending.has(m.id)) { const { res, rej } = pending.get(m.id); pending.delete(m.id); m.error ? rej(new Error(m.error.message)) : res(m.result); }
     else for (const l of listeners) l(m);
   };
-  const send = (method, params = {}, sessionId) => new Promise((res, rej) => {
-    const id = nextId++; pending.set(id, { res, rej }); ws.send(JSON.stringify({ id, method, params, sessionId }));
+  const send = (method, params = {}, sessionId, ms = 30000) => new Promise((res, rej) => {
+    if (closed) return rej(new Error('The DevTools connection is closed.'));
+    const id = nextId++, t = setTimeout(() => { pending.delete(id); rej(new Error(`DevTools call ${method} timed out after ${ms / 1000} s`)); }, ms);
+    pending.set(id, { res: v => { clearTimeout(t); res(v); }, rej: e => { clearTimeout(t); rej(e); } });
+    ws.send(JSON.stringify({ id, method, params, sessionId }));
   });
   const waitFor = (sid, method, ms = 15000) => new Promise((res, rej) => {
     const t = setTimeout(() => rej(new Error(`timeout waiting for ${method}`)), ms);
@@ -66,8 +74,11 @@ async function launch({ width = 1440, height = 1000 } = {}) {
     listeners.push(l);
   });
 
-  const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
-  const { sessionId: sid } = await send('Target.attachToTarget', { targetId, flatten: true });
+  let sid;
+  try {
+    const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
+    ({ sessionId: sid } = await send('Target.attachToTarget', { targetId, flatten: true }));
+  } catch (e) { try { ws.close(); } catch (_) { /* ignore */ } return fail(e); }
   const s = (m, p) => send(m, p, sid);
   const errors = [];
   listeners.push(m => {
@@ -120,11 +131,11 @@ async function launch({ width = 1440, height = 1000 } = {}) {
   await page.setViewport(width, height);
 
   async function close() {
-    try { await send('Browser.close'); } catch (_) { /* socket may already be closed */ }
+    try { await send('Browser.close', {}, undefined, 2000); } catch (_) { /* socket may already be closed */ }
     try { ws.close(); } catch (_) { /* ignore */ }
     for (let i = 0; i < 40 && child.exitCode === null; i++) await sleep(50);
-    kill();
-    for (let i = 0; i < 10; i++) { try { fs.rmSync(dir, { recursive: true, force: true }); break; } catch (_) { await sleep(100); } }
+    kill(); process.off('exit', kill);
+    await cleanupDir();
   }
   return { page, close };
 }

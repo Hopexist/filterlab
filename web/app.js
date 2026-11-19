@@ -34,6 +34,7 @@ const state = {
   q: { coef: 12, sig: 16, round: 'nearest', struct: 'sos', overflow: 'saturate', headroom: 0, ef: false },
 };
 let pinB = null;
+let rtlForm = 'direct';   // FIR export structure
 const sig = { source: 'tones', wav: null, name: '', error: '', vol: 0, loads: 0 };   // Signal tab: source, loaded WAV, volume (starts muted)
 let audio = { ctx: null, src: null }, sigMemo = { key: '', out: null };   // compare mode: a snapshot of the magnitude response of a pinned design
 let drawn = false, current = null, focusKey = null, renderQueued = false, fastMode = false;
@@ -478,6 +479,61 @@ function renderSignal(d) {
     series: [{ x: idx, y: xi, color: 'var(--ink-3)', dash: true }, { x: idx, y: yf, color: 'var(--s1)' }, ...(yq ? [{ x: idx, y: yq, color: 'var(--s2)' }] : [])],   // input drawn first, underneath
     tip: i => `<b>n = ${i}</b><br>Input ${fmtN(xi[i], 4)}<br><span class="sw" style="background:var(--s1)"></span>${fmtN(yf[i], 4)}` + (yq ? `<br><span class="sw" style="background:var(--s2)"></span>${fmtN(yq[i], 4)}` : '') });
 }
+/* ---------- hardware export (SystemVerilog, bit-exact with the fixed-point simulation) ---------- */
+function rtlDesign(d, st) {
+  const q = st.q, R = window.RTL, sigFmt = D.qFormat(0, q.sig - 1);
+  if (d.kind === 'fir') {
+    const qf = D.quantizeFir(d.h, q.coef, q.round); if (qf.fmt.fracBits < 0) return { error: 'The coefficient format is coarser than 1; use more coefficient bits.' };
+    const hInt = d.h.map(v => D.toInt(v, qf.fmt, q.round)), name = 'filterlab_fir';
+    return { name, sigFmt, text: R.genFirSv(hInt, qf.fmt, sigFmt, { overflow: q.overflow, form: rtlForm, moduleName: name }),
+      expect: x => D.firFixedSim(hInt.map(v => v * qf.fmt.lsb), x.map(v => v * sigFmt.lsb), qf.fmt, sigFmt, 'nearest', { overflow: q.overflow }).y };
+  }
+  const qs = D.quantizeSos(d.sos, q.coef, q.round);
+  if (!qs.sq.every(s => D.polyRoots(s.slice(3)).every(p => D.cabs(p) < 1))) return { error: `At ${q.coef} bits a biquad pole leaves the unit circle; there is nothing sensible to export. Use more bits.` };
+  if (qs.fmt.fracBits < 0) return { error: 'The coefficient format is coarser than 1; use more coefficient bits.' };
+  const rows = qs.sq.map(s => [0, 1, 2, 4, 5].map(i => D.toInt(s[i], qs.fmt, 'nearest'))), name = 'filterlab_sos';
+  const sosF = rows.map(r => [r[0], r[1], r[2], 1, r[3], r[4]].map((v, i) => i === 3 ? 1 : v * qs.fmt.lsb));
+  return { name, sigFmt, gain: qs.gain * Math.pow(2, q.headroom),
+    text: window.RTL.genSosSv(rows, qs.fmt, sigFmt, { overflow: q.overflow, headroomBits: q.headroom, errorFeedback: q.ef, moduleName: name }),
+    expect: x => D.sosFixedSim(sosF, x.map(v => v * sigFmt.lsb), qs.fmt, sigFmt, 'nearest', { overflow: q.overflow, headroomBits: q.headroom, errorFeedback: q.ef }).y };
+}
+function rtlStimulus(sigFmt) { // impulse, full-scale step, full-scale square, seeded random (JS generator; Python uses numpy's)
+  const hi = Math.pow(2, sigFmt.word - 1) - 1, lo = -hi - 1, r = D.toneSignal(256, 1, [], 0.5, 11), x = [];
+  for (let i = 0; i < 64; i++) x.push(i ? 0 : hi);
+  for (let i = 0; i < 64; i++) x.push(hi);
+  for (let i = 0; i < 128; i++) x.push(Math.floor(i / 16) % 2 ? lo : hi);
+  for (const v of r) x.push(Math.max(lo, Math.min(hi, Math.round(v * hi))));
+  return x;
+}
+function download(name, text) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+function rtlCard(d) {
+  const st = state, q = st.q, r = rtlDesign(d, st);
+  const formCtl = d.kind === 'fir' ? `<div class="field" style="grid-template-columns:1fr 150px;margin-top:0"><label for="rtlForm">Structure</label><select id="rtlForm"><option value="direct">Direct form</option><option value="transposed">Transposed form</option></select></div>`
+    : `<p class="hint" style="margin-top:0">Structure: direct-form-I biquad cascade${q.struct === 'direct' ? ' (exported as a cascade even though Structure above says single direct form)' : ''}.</p>`;
+  if (r.error) return `<div class="panel card" id="rtlCard"><div class="card-head"><h2>Hardware export</h2></div>${formCtl}<div class="banner info">${esc(r.error)}</div></div>`;
+  return `<div class="panel card" id="rtlCard"><div class="card-head"><h2>Hardware export</h2><span class="tag">Generated, not synthesized, not simulated</span></div>
+    ${formCtl}
+    <div class="tools play"><button class="btn" id="rtlCopy">Copy SystemVerilog</button><button class="btn" id="rtlDl">Download ${r.name}.sv</button><button class="btn" id="rtlTb">Download testbench and vectors</button></div>
+    <p class="caption">A synthesizable SystemVerilog module whose arithmetic matches this tab's fixed-point simulation bit for bit: ${q.coef}-bit coefficients, a ${q.sig}-bit signal, ${q.overflow === 'wrap' ? 'wrap-around' : 'saturating'} overflow${d.kind === 'iir' ? `, ${q.headroom} bit${q.headroom === 1 ? '' : 's'} of headroom${q.ef ? ', error feedback' : ''}` : ''}.</p>
+    <p class="caption">It assumes one clock, a synchronous active-high reset (<code>rst</code>), and one new sample per clock when <code>in_valid</code> is high. <code>out_data</code> and <code>out_valid</code> arrive one clock later. There is no pipelining, so the whole multiply-add chain must fit in one clock period.${d.kind === 'iir' ? ` The output is the cascade output: multiply it by ${fmtN(r.gain, 4)} (the leftover scaling gain${q.headroom ? ' times 2^' + q.headroom : ''}) downstream.` : ''}</p>
+    <p class="caption">"Not simulated": no HDL simulator was available where this was built. The test suite runs the generated text through an independent evaluator and compares it with the Python bit-true simulator; run the testbench with Icarus Verilog to check it yourself.</p>
+    <details class="data"><summary>Show the module</summary><pre class="code" id="rtlText"></pre></details></div>`;
+}
+function wireRtl(d) {
+  const sel = $('#rtlForm'); if (sel) { sel.value = rtlForm; sel.onchange = e => { rtlForm = e.target.value; renderQuant(current); $('#rtlForm').focus(); }; }
+  const r = rtlDesign(d, state); if (r.error) return;
+  $('#rtlText').textContent = r.text;
+  $('#rtlCopy').onclick = () => copy(r.text);
+  $('#rtlDl').onclick = () => download(`${r.name}.sv`, r.text);
+  $('#rtlTb').onclick = () => {
+    const x = rtlStimulus(r.sigFmt), y = Array.from(r.expect(x), v => Math.round(v / r.sigFmt.lsb));
+    download(`${r.name}_tb.sv`, window.RTL.genTestbenchSv(r.name, r.sigFmt, x.length, `${r.name}.hex`));
+    setTimeout(() => download(`${r.name}.hex`, window.RTL.vectorsHex(x, y, r.sigFmt)), 300);
+  };
+}
 function renderQuant(d) {
   const st = state, q = st.q, v = $('#view'), qa = quantAnalysis(d, st), nyq = st.fs / 2, iir = d.kind === 'iir';
   const sliderBlock = (id, label, min, max, val, big) => `<div class="slider"><label for="${id}">${label}</label><span class="big num">${big}</span><input type="range" id="${id}" min="${min}" max="${max}" value="${val}"></div>`;
@@ -498,11 +554,13 @@ function renderQuant(d) {
       <div class="panel card"><div class="card-head"><h2>Stopband attenuation against word length</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)', dash: true }, ...qa.sweep.map(s => ({ label: s.name, color: s.color, dash: s.dash }))])}<div class="chart" id="qSweep"></div><p class="caption">Each point rounds the same design to that many bits; nothing is redesigned. Fewer bits mean coarser steps and usually less stopband attenuation. ${sweepNote} The dotted marker is your current setting.</p><div id="qSweepT"></div></div></div>
     <div class="col"><div class="panel card"><div class="card-head"><h2>Poles and zeros</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)' }, { label: 'Quantized', color: 'var(--s2)' }])}<div class="chart" id="qPZ"></div><p class="caption">Rounding moves poles and zeros. ${iir ? 'A pole that reaches the unit circle makes the filter ring forever or blow up; high-order direct form is far more sensitive than a cascade of biquads.' : 'An FIR filter has no poles to move, so it stays stable at any word length; only its zeros, and so its stopband, shift.'}</p></div>
       ${iir && q.struct === 'sos' ? `<div class="panel card"><div class="card-head"><h2>Inside one biquad</h2></div>${dfDiagram(q.ef)}<p class="caption">Each section of the cascade rounds once, at Q. That rounding error (variance q²/12, with q one step of the ${q.sig}-bit signal) feeds back through −a₁ and −a₂, so the section's own poles amplify it before the later sections filter it.${q.ef ? ' Error feedback (dashed) subtracts round(a₁)·r[n−1] + round(a₂)·r[n−2] before rounding, which cancels most of that amplification when the poles sit near z = 1.' : ''}</p></div>` : ''}
+      ${rtlCard(d)}
       <div class="panel card"><div class="card-head"><h2>Rounding effects</h2></div>${quantScore(d, qa)}<p class="caption">Coefficient rounding changes which filter you get. Round-off noise is separate: it is the error added every time the arithmetic rounds a result, measured here on a test signal and compared with theory.</p></div></div></div>`;
   $('#qRound').value = q.round; if (iir) $('#qStruct').value = q.struct;
   const upd = () => renderQuant(current);
   $('#qCoef').oninput = e => { q.coef = +e.target.value; upd(); focusRestore('qCoef'); }; $('#qSig').oninput = e => { q.sig = +e.target.value; upd(); focusRestore('qSig'); };
   $('#qRound').onchange = e => { q.round = e.target.value; upd(); }; if (iir) $('#qStruct').onchange = e => { q.struct = e.target.value; upd(); };
+  wireRtl(d);
   $('#qOver').value = q.overflow; $('#qOver').onchange = e => { q.overflow = e.target.value; upd(); };
   if (iir) { $('#qHead').oninput = e => { q.headroom = +e.target.value; upd(); focusRestore('qHead'); }; $('#qEF').onchange = e => { q.ef = e.target.checked; upd(); focusRestore('qEF'); }; }
   const fr = Array.from(d.resp.f), y = Array.from(qa.resp.db);

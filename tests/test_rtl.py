@@ -96,3 +96,27 @@ def test_rejects_bad_arguments():
     with pytest.raises(ValueError): gen_fir_sv(h_int, cf, SF, overflow="clip", module_name="m")
     with pytest.raises(ValueError): gen_fir_sv(h_int, cf, SF, form="systolic", module_name="m")
     with pytest.raises(ValueError): gen_fir_sv(h_int, cf, SF, module_name="2bad name")
+
+def test_js_generated_module_and_vectors_agree_under_the_evaluator():
+    """The browser's export path: web/rtl.js text + vectors from the JS bit-true simulator, run through rtl_eval."""
+    import json, shutil, subprocess
+    node = shutil.which("node")
+    if not node: pytest.skip("node not installed")
+    js = r"""
+const D = require('./web/dsp.js'), R = require('./web/rtl.js'), out = [];
+const sf = D.qFormat(0, 15), x = []; for (let i = 0; i < 64; i++) x.push(i ? 0 : 32767); for (let i = 0; i < 64; i++) x.push(32767);
+for (let i = 0; i < 128; i++) x.push(Math.floor(i / 16) % 2 ? -32768 : 32767); for (const v of D.toneSignal(256, 1, [], 0.5, 11)) x.push(Math.max(-32768, Math.min(32767, Math.round(v * 32767))));
+const d = D.designIIR('cheby1', 'lowpass', 4, [0.1], 1, 1, 40), qs = D.quantizeSos(d.sos, 14);
+const rows = qs.sq.map(s => [0, 1, 2, 4, 5].map(i => D.toInt(s[i], qs.fmt, 'nearest'))), sosF = rows.map(r => [r[0] * qs.fmt.lsb, r[1] * qs.fmt.lsb, r[2] * qs.fmt.lsb, 1, r[3] * qs.fmt.lsb, r[4] * qs.fmt.lsb]);
+for (const [ov, hb, ef] of [['saturate', 0, false], ['wrap', 1, true]]) {
+  const y = Array.from(D.sosFixedSim(sosF, x.map(v => v * sf.lsb), qs.fmt, sf, 'nearest', { overflow: ov, headroomBits: hb, errorFeedback: ef }).y, v => Math.round(v / sf.lsb));
+  out.push({ text: R.genSosSv(rows, qs.fmt, sf, { overflow: ov, headroomBits: hb, errorFeedback: ef, moduleName: 'm' }), x, y });
+}
+const h = D.remez(31, [0, .2, .3, .5], [1, 0], null, 1).h, qf = D.quantizeFir(h, 12), hi = Array.from(h, v => D.toInt(v, qf.fmt));
+out.push({ text: R.genFirSv(hi, qf.fmt, sf, { form: 'transposed', overflow: 'wrap', moduleName: 'f' }), x, y: Array.from(D.firFixedSim(hi.map(v => v * qf.fmt.lsb), x.map(v => v * sf.lsb), qf.fmt, sf, 'nearest', { overflow: 'wrap' }).y, v => Math.round(v / sf.lsb)) });
+process.stdout.write(JSON.stringify(out));"""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cases = json.loads(subprocess.run([node, "-e", js], cwd=root, capture_output=True, text=True, check=True).stdout)
+    assert len(cases) == 3
+    for c in cases:
+        assert rtl_eval.run(c["text"], c["x"]) == c["y"]

@@ -87,6 +87,27 @@ const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
     if (phone.small) problems.push(`${phone.small} tab, segment or group controls are under 44 px tall on a phone`);
     await p.setViewport(1440, 1000);
 
+    // desktop: no tab of an FIR or IIR design may scroll sideways at 1440 px
+    for (const method of ['remez', 'cheby1']) {
+      await p.evaluate(m => { const s = window.__filterlab.state; Object.assign(s, { method: m, btype: 'lowpass', fs: 8000, edges: [1000, 1500], rp: 1, rs: 60, orderMode: 'auto' }); Object.assign(s.q, { struct: 'sos', ef: true }); }, method);
+      for (const tab of ['response', 'time', 'quant', 'signal']) {
+        await p.click(`[data-tab=${tab}]`); await p.wait(300);
+        const over = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+        if (over > 0) problems.push(`${method} ${tab} tab scrolls sideways by ${over} px at 1440 px`);
+      }
+    }
+    console.log('desktop overflow check done (remez, cheby1 x 4 tabs)');
+
+    // hardware export card: present for FIR and IIR, honest label, text matches web/rtl.js for the shown settings
+    for (const method of ['remez', 'cheby1']) {
+      await p.evaluate(m => { const s = window.__filterlab.state; s.method = m; Object.assign(s.q, { ef: false, headroom: 0, coef: 16 }); }, method);
+      await p.click('[data-tab=response]'); await p.click('[data-tab=quant]'); await p.wait(400);
+      const ex = await p.evaluate(() => ({ tag: document.querySelector('#rtlCard .tag')?.textContent || '', text: document.getElementById('rtlText')?.textContent || '' }));
+      console.log(`hardware export (${method}):`, ex.tag, '|', ex.text.split('\n')[0]);
+      if (ex.tag !== 'Generated, not synthesized, not simulated') problems.push(`${method}: export card missing or not labelled honestly`);
+      if (!/^\/\/ filterlab_(fir|sos): /.test(ex.text) || !/endmodule\n$/.test(ex.text)) problems.push(`${method}: export text missing or incomplete`);
+    }
+
     // Signal tab: test tones render with a finite fixed-point SNR; a WAV loads through the file input; a bad file says why
     await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'remez', btype: 'lowpass', fs: 8000, edges: [1000, 1500], rp: 1, rs: 60, orderMode: 'auto' }); Object.assign(s.q, { coef: 16, sig: 16, ef: false, headroom: 0, overflow: 'saturate' }); });
     await p.click('[data-tab=signal]'); await p.wait(600);

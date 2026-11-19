@@ -332,3 +332,8 @@ kbd { font: 12px var(--mono); border: 1px solid var(--line); border-bottom-width
   .tour-ring, .tour-card { transition: left 200ms cubic-bezier(.2, .7, .3, 1), top 200ms cubic-bezier(.2, .7, .3, 1), width 200ms cubic-bezier(.2, .7, .3, 1), height 200ms cubic-bezier(.2, .7, .3, 1); }
   dialog#help[open] { animation: open-in 140ms ease-out; }
 }
+
+/* pole-zero what-if handles */
+.chart .pzh { fill: transparent; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 2 2; cursor: grab; }
+.chart .pzh:hover, .chart .pzh:focus-visible { fill: var(--accent-soft); fill-opacity: .5; stroke-dasharray: none; outline: none; }
+.explore-label { margin-top: 8px; }

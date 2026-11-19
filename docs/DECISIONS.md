@@ -152,7 +152,12 @@ Format: decision / why / rejected alternative.
     - dimensioned attenuation and a leader for passband ripple;
     - a title block with the design parameters, the measured values, and the app's own pass/fail wording ("Target 1 dB or less", "Over by / Short by", meets/misses).
   - It also says the figures are measured by Filterlab's spec check on the floating-point design. Valid SVG, checked in `ui_sweep`.
-- **Interaction g. Pole-zero "what-if" (stretch): not built.** Time went to verification instead.
+- **Interaction g. Pole-zero "what-if" (stretch): built.**
+  - "Explore: drag poles and zeros" on the Poles and zeros card edits a copy of the design's roots. Conjugate pairs move together, and real roots stay on the real axis, so the coefficients stay real.
+  - The pole-zero plot keeps a fixed scale while you drag. The roots move by pointer, or by arrow keys on a focused root (Shift for bigger steps).
+  - The existing `zpk2sos` + `sosFreqz` recompute a dashed "Exploration (what-if, not a design)" trace on the magnitude plot, with gain normalised to a 0 dB peak.
+  - A banner reads "Exploration, not a spec-meeting design." The design, its Spec check and every other tab are untouched, which `ui_sweep` checks. A pole on or outside the unit circle adds an "unstable" note.
+  - Any redesign ends the exploration.
 - **Found, not fixed (needs owner approval: `dsp/` and the pass/fail logic are out of scope).** Parks-McClellan fails for long filters at the default spec: at 160 taps and above, `web/dsp.js` `remez` returns all-zero coefficients, and `dsp/remez.py` returns NaN (divide by zero in the barycentric step). With a manual order of 160 or more, the app then shows an empty response and the Spec check marks ✓ "0 dB ripple, 240 dB attenuation", which is a false pass. Auto mode (36 taps) never gets there. The fix belongs in `remez` (and the spec check should reject an all-zero or non-finite filter). The new order slider allows up to 256 taps for FIR; Remez is broken above about 150 taps, so treat those results as invalid until this is fixed.
 - **Verify.** I looked at all 36 screenshots, plus close-ups of the tour, the spec sheet and every theme on a phone. Fixed from that look:
   - the spec sheet's ripple label collided with the edge dimension, and the attenuation label ran off the sheet;

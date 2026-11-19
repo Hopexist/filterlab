@@ -236,6 +236,21 @@ const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
       if (!has(`passband ripple ${ss.rip} dB`) || !has(`attenuation ${ss.att} dB`) || !has('Target 1 dB or less') || !has('Target 60 dB or more') || !ss.want.every(has)) problems.push('spec sheet: measured values or the pass/fail wording do not match the app');
       if (!has("Measured by Filterlab's spec check")) problems.push('spec sheet: missing its provenance line'); }
 
+    // g. pole-zero what-if: labelled as exploration, a dashed trace that moves with the roots, the design and spec check untouched
+    { await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'cheby1', btype: 'lowpass', fs: 8000, edges: [1000, 1500], rp: 1, rs: 60, orderMode: 'auto' }); document.querySelector('[data-tab=time]').click(); document.querySelector('[data-tab=response]').click(); });
+      const spec0 = await p.evaluate(() => [...document.querySelectorAll('#view .score .val')].map(v => v.textContent.trim()).join('|'));
+      await p.click('#exploreBtn'); await p.wait(150);
+      const d0 = await p.evaluate(() => document.querySelector('#cMag path.trace[stroke-dasharray]')?.getAttribute('d'));
+      await p.evaluate(() => [...document.querySelectorAll('#cPZ .pzh')].find(h => h.dataset.t === 'pole').focus());
+      for (let i = 0; i < 6; i++) await p.press('ArrowLeft');
+      const ex = await p.evaluate(() => ({ d1: document.querySelector('#cMag path.trace[stroke-dasharray]')?.getAttribute('d'), label: document.querySelector('.explore-label')?.textContent || '', legend: document.querySelector('#view .legend').textContent, focus: document.activeElement.classList.contains('pzh'), spec: [...document.querySelectorAll('#view .score .val')].map(v => v.textContent.trim()).join('|') }));
+      await p.click('#exploreBtn'); await p.wait(150); const gone = await p.evaluate(() => !document.querySelector('#cMag path.trace[stroke-dasharray]') && !document.querySelector('.explore-label'));
+      console.log('what-if:', JSON.stringify({ changed: !!d0 && ex.d1 !== d0, focus: ex.focus, specSame: ex.spec === spec0, gone }));
+      if (!/^Exploration, not a spec-meeting design\./.test(ex.label) || !/Exploration \(what-if, not a design\)/.test(ex.legend)) problems.push('what-if: missing its exploration label or legend entry');
+      if (!d0 || ex.d1 === d0 || !ex.focus) problems.push('what-if: moving a pole with the arrow keys did not change the dashed trace, or lost focus');
+      if (ex.spec !== spec0) problems.push(`what-if: the spec check changed while exploring (${spec0} -> ${ex.spec})`);
+      if (!gone) problems.push('what-if: ending exploration left the dashed trace or the label behind'); }
+
     // Signal tab: test tones render with a finite fixed-point SNR; a WAV loads through the file input; a bad file says why
     await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'remez', btype: 'lowpass', fs: 8000, edges: [1000, 1500], rp: 1, rs: 60, orderMode: 'auto' }); Object.assign(s.q, { coef: 16, sig: 16, ef: false, headroom: 0, overflow: 'saturate' }); });
     await p.click('[data-tab=signal]'); await p.wait(600);

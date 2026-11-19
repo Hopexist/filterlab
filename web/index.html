@@ -338,6 +338,11 @@ kbd { font: 12px var(--mono); border: 1px solid var(--line); border-bottom-width
   .tour-ring, .tour-card { transition: left 200ms cubic-bezier(.2, .7, .3, 1), top 200ms cubic-bezier(.2, .7, .3, 1), width 200ms cubic-bezier(.2, .7, .3, 1), height 200ms cubic-bezier(.2, .7, .3, 1); }
   dialog#help[open] { animation: open-in 140ms ease-out; }
 }
+
+/* pole-zero what-if handles */
+.chart .pzh { fill: transparent; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 2 2; cursor: grab; }
+.chart .pzh:hover, .chart .pzh:focus-visible { fill: var(--accent-soft); fill-opacity: .5; stroke-dasharray: none; outline: none; }
+.explore-label { margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -1646,7 +1651,7 @@ function lineChart(el, cfg) {
 function pzChart(el, cfg) {
   const Wd = Math.min(Math.max(el.clientWidth || 300, 220), 420), H = Wd;
   let R = 1.4; for (const z of [...cfg.zeros, ...cfg.poles, ...(cfg.qZeros || []), ...(cfg.qPoles || [])]) R = Math.max(R, Math.min(D.cabs(z) * 1.1, 6));
-  R = R > 1.5 ? Math.ceil(R * 2) / 2 : 1.4; const c = Wd / 2, k = (Wd / 2 - 24) / R, X = x => c + x * k, Y = y => c - y * k;
+  R = cfg.R || (R > 1.5 ? Math.ceil(R * 2) / 2 : 1.4); const c = Wd / 2, k = (Wd / 2 - 24) / R, X = x => c + x * k, Y = y => c - y * k;
   let s = `<svg viewBox="0 0 ${Wd} ${H}" width="${Wd}" height="${H}" role="img" aria-label="Pole-zero plot"><rect class="screen" x="0.5" y="0.5" width="${Wd - 1}" height="${H - 1}"/><rect class="frame" x="0.5" y="0.5" width="${Wd - 1}" height="${H - 1}"/><g class="grid">`;
   [0.5, 1.5].filter(r => r < R).forEach(r => { s += `<circle cx="${c}" cy="${c}" r="${r * k}" fill="none" stroke="var(--grid)"/>`; });
   s += `<line x1="${24}" x2="${Wd - 24}" y1="${c}" y2="${c}"/><line y1="${24}" y2="${H - 24}" x1="${c}" x2="${c}"/></g><circle cx="${c}" cy="${c}" r="${k}" fill="none" stroke="var(--ink-3)" stroke-width="1.5"/>`;
@@ -1691,6 +1696,7 @@ function pzChart(el, cfg) {
       hide: () => { g.setAttribute('visibility', 'hidden'); tip.hidden = true; },
     });
   }
+  return { X, Y, R, k, c, Wd, svg };
 }
 
 const legend = items => `<div class="legend">${items.map(i => `<span${i.ghost ? ' class="ghost"' : ''}><i class="${i.dash ? 'dash' : ''}" style="border-color:${i.color}${i.w ? `;border-top-width:${Math.max(i.w, 2)}px` : ''}"></i>${esc(i.label)}</span>`).join('')}</div>`;
@@ -1721,27 +1727,34 @@ function renderResponse(d) {
   v.innerHTML = `<div class="grid2"><div class="col">
     <div class="panel card"><div class="card-head"><h2>Magnitude</h2><div class="tools"><span class="drag-hint">Drag the edge tabs to reshape the filter</span> ${tools('zoom', [['full', 'Full range'], ['pass', 'Passband']], st.zoom)}
         <button class="btn" id="pinB" aria-pressed="${!!pinB}">${pinB ? 'Clear B' : 'Pin as B'}</button></div></div>
-      ${legend([{ label: pinB ? 'A: current design' : 'Response', color: 'var(--s1)' }, ...(respGhost ? [{ label: 'Previous order (faint)', color: 'var(--s1)', ghost: true }] : []), ...(pinB ? [{ label: 'B: ' + pinB.title, color: 'var(--cmp)', dash: true }] : []), { label: 'Spec limit (shaded = outside spec)', color: 'var(--shade-line)' }])}
+      ${legend([{ label: pinB ? 'A: current design' : 'Response', color: 'var(--s1)' }, ...(respGhost ? [{ label: 'Previous order (faint)', color: 'var(--s1)', ghost: true }] : []), ...(explore && explore.src === d ? [{ label: 'Exploration (what-if, not a design)', color: 'var(--accent)', dash: true }] : []), ...(pinB ? [{ label: 'B: ' + pinB.title, color: 'var(--cmp)', dash: true }] : []), { label: 'Spec limit (shaded = outside spec)', color: 'var(--shade-line)' }])}
       <div class="chart" id="cMag" data-keepfocus="1"></div><div id="tMag"></div></div>
     <div class="panel card"><div class="card-head"><h2>${st.phase === 'phase' ? 'Phase' : 'Group delay'}</h2><div class="tools">${tools('phase', [['phase', 'Phase'], ['gd', 'Group delay']], st.phase)}</div></div>
       <div class="chart" id="cPh"></div></div></div>
-    <div class="col"><div class="panel card"><div class="card-head"><h2>Poles and zeros</h2></div><div class="legend"><span><svg class="mk" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="var(--s1)" stroke-width="2"/></svg>Zero</span><span><svg class="mk" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3L11 11M11 3L3 11" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/></svg>Pole</span></div><div class="chart" id="cPZ"></div><p class="hint">${d.kind === 'fir' ? `FIR: ${d.poleOrigin} poles sit at the origin, so it is always stable.` : 'All poles inside the unit circle means a stable filter.'}</p></div>
+    <div class="col"><div class="panel card"><div class="card-head"><h2>Poles and zeros</h2></div><div class="legend"><span><svg class="mk" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="var(--s1)" stroke-width="2"/></svg>Zero</span><span><svg class="mk" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3L11 11M11 3L3 11" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/></svg>Pole</span></div><div class="chart" id="cPZ"></div>
+      ${explore && explore.src === d ? `<div class="banner info explore-label"><b>Exploration, not a spec-meeting design.</b> Dragging poles and zeros changes only the dashed trace on the magnitude plot (gain normalised to a 0 dB peak). The design, its spec check and every other tab are unchanged.</div><p class="hint" id="exploreNote"></p>` : `<p class="hint">${d.kind === 'fir' ? `FIR: ${d.poleOrigin} poles sit at the origin, so it is always stable.` : 'All poles inside the unit circle means a stable filter.'}</p>`}
+      <div class="tools play"><button class="btn" id="exploreBtn" aria-pressed="${!!(explore && explore.src === d)}">${explore && explore.src === d ? 'End exploration' : 'Explore: drag poles and zeros'}</button>${explore && explore.src === d ? '<button class="btn" id="exploreReset">Reset roots</button>' : ''}</div></div>
     <div class="panel card"><div class="card-head"><h2>Spec check</h2><button class="btn" id="specSheet" title="A technical drawing of this design (shortcut: D)">Spec sheet (SVG)</button></div>${scoreHtml(d)}</div></div></div>`;
   $$('[data-k]', v).forEach(b => b.addEventListener('click', () => { state[b.dataset.k] = b.dataset.v; renderResponse(current); }));
   $('#specSheet').addEventListener('click', downloadSpecSheet);
+  if (explore && explore.src !== d) explore = null;   // a new design ends the what-if
+  $('#exploreBtn').addEventListener('click', () => { if (explore) explore = null; else exploreStart(d); renderResponse(current); $('#exploreBtn').focus(); });
+  if ($('#exploreReset')) $('#exploreReset').addEventListener('click', () => { exploreStart(d); renderResponse(current); });
   $('#pinB').addEventListener('click', () => { pinB = pinB ? null : { title: d.title, f: Array.from(d.resp.f), db: Array.from(d.resp.db), fs: st.fs }; renderResponse(current); $('#pinB').focus(); });
   const nyq = st.fs / 2, r = d.resp, fr = Array.from(r.f), bSame = pinB && pinB.fs === st.fs;
   const series = [{ x: fr, y: Array.from(r.db) }, ...(respGhost ? [{ x: respGhost.f, y: respGhost.db, ghost: true }] : [])]; if (pinB) series.push({ x: pinB.f, y: pinB.db, color: 'var(--cmp)', dash: true });
-  lineChart($('#cMag'), { link: 'resp', morph: true, label: pinB ? 'Magnitude response in decibels, current design A and pinned design B' : 'Magnitude response in decibels', height: 300, xd: [0, nyq], yd: yDomain(st), yLabel: 'Gain (dB)', xLabel: 'Frequency (Hz)', series,
+  const drawMag = er => lineChart($('#cMag'), { link: 'resp', morph: true, label: pinB ? 'Magnitude response in decibels, current design A and pinned design B' : 'Magnitude response in decibels', height: 300, xd: [0, nyq], yd: yDomain(st), yLabel: 'Gain (dB)', xLabel: 'Frequency (Hz)', series: er ? [...series, { x: er.f, y: er.db, color: 'var(--accent)', dash: true, w: 2 }] : series,
     shades: magShades(st, d), handles: edgeHandles(st, d), onDrag: onEdgeDrag,
     tip: i => `<b>${fmtN(r.f[i], 1)} Hz</b><br>${pinB ? '<span class="sw" style="background:var(--s1)"></span>A ' : ''}${fmtN(r.db[i], 2)} dB` + (bSame ? `<br><span class="sw dash" style="background:var(--cmp)"></span>B ${fmtN(pinB.db[i], 2)} dB` : '') });
+  drawMag(null); exploreRedrawMag = explore && explore.src === d ? drawMag : null;
   const phaseChart = () => {
     if (st.phase === 'phase') { const y = Array.from(r.phase, p => p * 180 / Math.PI); lineChart($('#cPh'), { link: 'resp', label: 'Phase response', height: 200, xd: [0, nyq], yd: padRange(y), yLabel: 'Phase (°)', xLabel: 'Frequency (Hz)', series: [{ x: fr, y }], tip: i => `<b>${fmtN(r.f[i], 1)} Hz</b><br>${fmtN(y[i], 1)}°` }); }
     else { const g = Array.from(d.gd.gd), fg = Array.from(d.gd.f), fin = g.filter(Number.isFinite).sort((a, b) => a - b); const lo = fin[Math.floor(fin.length * 0.02)], hi = fin[Math.floor(fin.length * 0.98)]; lineChart($('#cPh'), { link: 'resp', label: 'Group delay', height: 200, xd: [0, nyq], yd: padRange([lo, hi, 0]), yLabel: 'Delay (samples)', xLabel: 'Frequency (Hz)', series: [{ x: fg, y: g }], tip: i => `<b>${fmtN(fg[i], 1)} Hz</b><br>${fmtN(g[i], 2)} samples (${fmtN(g[i] / st.fs * 1000, 3)} ms)` }); }
   };
   phaseChart();
   const at = f => { let i = Math.round(f / nyq * (fr.length - 1)); i = clamp(i, 0, fr.length - 1); return i; };
-  if (respScrub && d.kind === 'fir' && d.h.length > 64) $('#cPZ').innerHTML = '<p class="hint pz-wait">Poles and zeros redraw when you let go of the slider (root-finding a long FIR takes a moment).</p>'; else pzChart($('#cPZ'), { zeros: d.zeros, poles: d.poles, poleOrigin: d.poleOrigin, fs: st.fs, link: 'resp',
+  if (explore && explore.src === d) wireExplore(d);
+  else if (respScrub && d.kind === 'fir' && d.h.length > 64) $('#cPZ').innerHTML = '<p class="hint pz-wait">Poles and zeros redraw when you let go of the slider (root-finding a long FIR takes a moment).</p>'; else pzChart($('#cPZ'), { zeros: d.zeros, poles: d.poles, poleOrigin: d.poleOrigin, fs: st.fs, link: 'resp',
     readout: (f, w) => { const i = at(f); return `<b>${fmtN(r.f[i], 1)} Hz</b><br>z = e<sup>jω</sup>, ω = ${fmtN(w, 4)} rad/sample<br>|H| ${fmtN(r.db[i], 2)} dB · phase ${fmtN(r.phase[i] * 180 / Math.PI, 1)}°`; } });
   countReadouts(v);
   const step = Math.max(1, Math.floor(fr.length / 32)); const rows = []; for (let i = 0; i < fr.length; i += step) rows.push([fmtN(r.f[i], 1), fmtN(r.db[i], 2), fmtN(r.phase[i] * 180 / Math.PI, 1), ...(bSame ? [fmtN(pinB.db[i], 2)] : [])]);
@@ -2157,6 +2170,45 @@ function renderQuant(d, opts = {}) {
   $('#qSweepT').innerHTML = tableDetails(['Bits', ...qa.sweep.map(s => s.name)], wd.map((w, i) => [w, ...qa.sweep.map(s => Number.isFinite(s.y[i]) ? fmtN(s.y[i], 1) + ' dB' : 'unstable or no passband')]));
   countReadouts($('#qBody'));
   if (opts.scrub && !opts.final && d.kind === 'fir' && d.h.length > 64) $('#qPZ').innerHTML = '<p class="hint pz-wait">Poles and zeros redraw when you let go of the slider (root-finding a long FIR takes a moment).</p>'; else pzChart($('#qPZ'), { zeros: d.zeros, poles: d.poles, poleOrigin: d.poleOrigin, qZeros: qa.zeros, qPoles: qa.poles, qPoleOrigin: qa.poleOrigin || 0, fs: st.fs });
+}
+/* ---------- pole-zero what-if: drag a copy of the roots and watch a dashed response. Exploration only. ---------- */
+let explore = null;   // { src: design, zeros: [], poles: [], R }
+function exploreStart(d) {
+  const zs = d.zeros.map(z => ({ re: z.re, im: z.im })), ps = [...d.poles.map(z => ({ re: z.re, im: z.im })), ...Array.from({ length: d.poleOrigin || 0 }, () => ({ re: 0, im: 0 }))];
+  let R = 1.4; for (const z of [...zs, ...ps]) R = Math.max(R, Math.min(D.cabs(z) * 1.1, 6)); R = R > 1.5 ? Math.ceil(R * 2) / 2 : 1.4;
+  explore = { src: d, zeros: zs, poles: ps, R };
+}
+function exploreResp(d) {   // existing analysis code: zpk2sos + sosFreqz, then normalised to a 0 dB peak
+  const sos = D.zpk2sos(explore.zeros, explore.poles, 1), r = D.sosFreqz(sos, d.resp.f.length, state.fs), db = Array.from(r.db), mx = Math.max(...db.filter(Number.isFinite));
+  return { f: Array.from(r.f), db: db.map(v => v - mx), unstable: explore.poles.some(p => D.cabs(p) >= 1) };
+}
+function conjPartner(arr, i) { const z = arr[i]; if (Math.abs(z.im) < 1e-9) return -1; let best = -1, bd = Infinity; arr.forEach((q, j) => { if (j !== i && Math.abs(q.re - z.re) + Math.abs(q.im + z.im) < bd) { bd = Math.abs(q.re - z.re) + Math.abs(q.im + z.im); best = j; } }); return best; }
+function exploreMove(type, i, re, im) {   // conjugate pairs move together; real roots stay on the real axis (real coefficients)
+  const arr = type === 'zero' ? explore.zeros : explore.poles, z = arr[i], j = conjPartner(arr, i);
+  if (j < 0) { arr[i] = { re, im: 0 }; return; }
+  const up = z.im > 0 ? 1 : -1, y = Math.max(Math.abs(im), 1e-6) * up; arr[i] = { re, im: y }; arr[j] = { re, im: -y };
+}
+function exploreDraw(d) {   // redraw the editable pole-zero plot and the dashed what-if trace (not the rest of the tab)
+  const el = $('#cPZ'), geo = pzChart(el, { zeros: explore.zeros, poles: explore.poles, poleOrigin: 0, fs: state.fs, R: explore.R }), er = exploreResp(d);
+  const handles = [...explore.zeros.map((z, i) => ['zero', i, z]), ...explore.poles.map((z, i) => ['pole', i, z])].filter(([, , z]) => z.im >= -1e-9 && D.cabs(z) > 1e-9);
+  geo.svg.insertAdjacentHTML('beforeend', handles.map(([t, i, z]) => `<circle class="pzh" r="10" cx="${geo.X(z.re)}" cy="${geo.Y(z.im)}" tabindex="0" role="slider" data-t="${t}" data-i="${i}" aria-label="${t} at ${fmtN(z.re, 3)} ${z.im < 0 ? '−' : '+'} ${fmtN(Math.abs(z.im), 3)}j. Arrow keys move it; its conjugate follows."/>`).join(''));
+  exploreRedrawMag && exploreRedrawMag(er);
+  $('#exploreNote').innerHTML = er.unstable ? '<b>A pole is on or outside the unit circle:</b> this what-if filter is unstable; the dashed trace is only the frequency-response formula.' : '';
+  return geo;
+}
+let exploreRedrawMag = null;
+function wireExplore(d) {
+  const el = $('#cPZ'); let geo = exploreDraw(d), drag = null, raf = 0;
+  const toZ = ev => { const r = geo.svg.getBoundingClientRect(), px = (ev.clientX - r.left) * (geo.Wd / r.width), py = (ev.clientY - r.top) * (geo.Wd / r.height); return { re: (px - geo.c) / geo.k, im: (geo.c - py) / geo.k }; };
+  el.onpointerdown = ev => { const h = ev.target.closest('.pzh'); if (!h) return; ev.preventDefault(); drag = { t: h.dataset.t, i: +h.dataset.i }; el.setPointerCapture(ev.pointerId); };
+  el.onpointermove = ev => { if (!drag) return; const z = toZ(ev); exploreMove(drag.t, drag.i, z.re, z.im); if (!raf) raf = requestAnimationFrame(() => { raf = 0; geo = exploreDraw(d); }); };
+  el.onpointerup = el.onpointercancel = () => { drag = null; };
+  el.onkeydown = ev => {
+    const h = ev.target.closest && ev.target.closest('.pzh'); const dv = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[ev.key]; if (!h || !dv) return;
+    ev.preventDefault(); const st = ev.shiftKey ? 0.05 : 0.01, arr = h.dataset.t === 'zero' ? explore.zeros : explore.poles, z = arr[+h.dataset.i];
+    exploreMove(h.dataset.t, +h.dataset.i, z.re + dv[0] * st, z.im + dv[1] * st); geo = exploreDraw(d);
+    const again = $(`.pzh[data-t="${h.dataset.t}"][data-i="${h.dataset.i}"]`, el); if (again) again.focus();
+  };
 }
 /* ---------- spec sheet: a technical drawing of the current design (SVG download) ---------- */
 function specSheetSvg(d, st) {

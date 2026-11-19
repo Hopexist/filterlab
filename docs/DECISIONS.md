@@ -165,3 +165,4 @@ Format: decision / why / rejected alternative.
   - the tour changed the design without updating the side panel's fields, and restoring had the same gap; both now resync the controls, and `ui_sweep` checks the field.
 
   Impeccable's detector: file and 1440×1000 clean. At 390×844 it still reports the segmented-control "nested cards" false positive from the last run.
+- **Impeccable design hook: flat-type-hierarchy.** Card titles were 16 px over 14 px body (1.14x). Raised to 18 px (1.29x). Screenshots checked at 1440 and 390 px; the full gate passes.

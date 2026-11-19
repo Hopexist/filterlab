@@ -73,3 +73,10 @@ Format: decision / why / rejected alternative.
 - **UI. Took from ui-ux-pro-max:** dense spacing, mono-for-data with sans-for-labels, its accessibility checklist, and "not colour alone". **Rejected:** its suggested style, pattern, palette and fonts, which matched badly ("Biomimetic", "Enterprise Gateway", #FF4D4D, Google Fonts).
 - **UI task 3. Impeccable's craft floor rejects a system display face; the brief overrides it.** The brief allows "a carefully chosen system stack" when no font can be embedded legitimately, and Bahnschrift is a real DIN 1451 cut. Without Bahnschrift (macOS, Linux), the stack falls back through DIN Alternate / Barlow / Roboto Condensed to system-ui.
 - **UI task 3. Readout units are split for display only** (`unitSplit`): the text "0.826 dB" is unchanged, and the number is wrapped big with the unit small and muted. Values that do not start with a number ("Stable", "order 8, 4 biquads") are set smaller rather than split.
+- **UI task 4. Plots sit on an instrument "screen":**
+  - the plot field uses the `--screen` surface inside a `--bezel` frame, with a major graticule plus a minor one halfway between the ticks;
+  - the pole-zero plot gets the same square screen;
+  - chart text went from 11 px `--ink-3` to 12 px `--ink-2`;
+  - the multiplicity label is offset and haloed, so it no longer collides with the × marker;
+  - the pole-zero legend uses drawn SVG marks instead of unicode glyphs.
+- **UI task 4. Ideal and quantized differ without colour:** wherever both are overlaid (Quantization response, Signal spectra, first samples), the ideal trace is wide (3.5 px) and drawn underneath, and the quantized one is thin (1.6 px) on top; the legends show the same weights. The dataviz validator passes both themes against the new screen surfaces: CVD ΔE 24.7 light and 26.8 dark (target ≥ 8), normal-vision ΔE 33.6 and 31.8, contrast ≥ 3:1. Trace hues are unchanged.

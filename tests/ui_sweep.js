@@ -104,8 +104,40 @@ const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
       await p.click('[data-tab=response]'); await p.click('[data-tab=quant]'); await p.wait(400);
       const ex = await p.evaluate(() => ({ tag: document.querySelector('#rtlCard .tag')?.textContent || '', text: document.getElementById('rtlText')?.textContent || '' }));
       console.log(`hardware export (${method}):`, ex.tag, '|', ex.text.split('\n')[0]);
-      if (ex.tag !== 'Generated, not synthesized, not simulated') problems.push(`${method}: export card missing or not labelled honestly`);
+      if (ex.tag !== 'Generated, not synthesized, not run in an HDL simulator') problems.push(`${method}: export card missing or not labelled honestly`);
       if (!/^\/\/ filterlab_(fir|sos): /.test(ex.text) || !/endmodule\n$/.test(ex.text)) problems.push(`${method}: export text missing or incomplete`);
+    }
+
+    // Simulate hardware: the interpreter runs the shown text; live comparison, stepping, cursor, a forced mismatch is reported
+    const SIMLABEL = "Simulated in your browser by Filterlab's interpreter of the generated SystemVerilog. Not run in a standard HDL simulator, not synthesized.";
+    const simState = () => p.evaluate(() => ({ cmp: document.getElementById('rsimCmp')?.textContent || '', read: document.getElementById('rsimRead')?.textContent || '',
+      label: [...document.querySelectorAll('#rsimCard .caption')].map(c => c.textContent), rows: document.querySelectorAll('#rsimWave .wl').length }));
+    for (const method of ['remez', 'cheby1']) {
+      await p.evaluate(m => { const s = window.__filterlab.state; s.method = m; Object.assign(s.q, { ef: m === 'cheby1', headroom: m === 'cheby1' ? 1 : 0, coef: 16, sig: 16 }); window.__filterlab.rsim.input = 'impulse'; window.__filterlab.rsim.len = 64; }, method);
+      await p.click('[data-tab=response]'); await p.click('[data-tab=quant]'); await p.wait(400);
+      let st = await simState();
+      console.log(`simulate hardware (${method}):`, st.cmp, '|', st.rows, 'rows');
+      if (!/: 64 of 64 samples identical\.$/.test(st.cmp)) problems.push(`${method}: simulation comparison missing or not 64 of 64 (${st.cmp})`);
+      if (!st.label.includes(SIMLABEL)) problems.push(`${method}: simulation panel missing its plain label`);
+      if (st.rows < 4) problems.push(`${method}: waveform shows fewer than 4 signals`);
+      await p.click('#rsimReset'); st = await simState();
+      if (!/nothing simulated yet \(64 clocks to go\)/.test(st.cmp)) problems.push(`${method}: reset did not clear the run (${st.cmp})`);
+      await p.click('#rsimStep'); await p.click('#rsimStep'); await p.click('#rsimStep'); st = await simState();
+      if (!/3 of 3 samples identical so far \(clock 3 of 64\)/.test(st.cmp) || !/^Clock 2/.test(st.read)) problems.push(`${method}: stepping one clock at a time failed (${st.cmp} / ${st.read.slice(0, 20)})`);
+      await p.click('#rsimRun');
+      await p.evaluate(() => { const el = document.getElementById('rsimWave'); el.focus(); for (let i = 0; i < 5; i++) el.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); });
+      st = await simState(); if (!/^Clock 58/.test(st.read)) problems.push(`${method}: arrow keys do not move the waveform cursor (${st.read.slice(0, 20)})`);
+      const b = await p.box('#rsimWave'); await p.mouse('mouseMoved', b.x + b.width * 0.5, b.y + 30); st = await simState();
+      if (!/^Clock [1-4][0-9] /.test(st.read) || !/out_data takes -?\d+; the bit-true model says -?\d+ identical/.test(st.read)) problems.push(`${method}: hover readout missing exact values (${JSON.stringify(st.read)})`);
+      for (const [inp, len] of [['sine', 200], ['noise', 256], ['square', 16], ['step', 40]]) {
+        await p.evaluate((i, l) => { const a = document.getElementById('rsimIn'); a.value = i; a.dispatchEvent(new Event('change')); const n = document.getElementById('rsimLen'); n.value = l; n.dispatchEvent(new Event('change')); }, inp, len);
+        st = await simState(); if (!new RegExp(`: ${len} of ${len} samples identical\\.$`).test(st.cmp)) problems.push(`${method} ${inp} x${len}: ${st.cmp}`);
+      }
+      if (method === 'cheby1') await p.screenshot(path.join(SHOTS, 'rtlsim-iir.png'));
+      await p.evaluate(() => { const rsim = window.__filterlab.rsim; rsim.run.model[5] += 1; document.getElementById('rsimRun').click(); });
+      st = await simState(); console.log('forced mismatch:', st.cmp);
+      if (!/: 39 of 40 samples identical\. First mismatch at clock 5: RTL out_data = -?\d+, model = -?\d+\.$/.test(st.cmp)) problems.push(`${method}: a mismatch is not reported with its first cycle and values (${st.cmp})`);
+      await p.evaluate(() => { const rsim = window.__filterlab.rsim; rsim.run = null; rsim.input = 'impulse'; rsim.len = 64; });
     }
 
     // Signal tab: test tones render with a finite fixed-point SNR; a WAV loads through the file input; a bad file says why

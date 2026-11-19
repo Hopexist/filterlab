@@ -485,7 +485,7 @@ function rtlDesign(d, st) {
   if (d.kind === 'fir') {
     const qf = D.quantizeFir(d.h, q.coef, q.round); if (qf.fmt.fracBits < 0) return { error: 'The coefficient format is coarser than 1; use more coefficient bits.' };
     const hInt = d.h.map(v => D.toInt(v, qf.fmt, q.round)), name = 'filterlab_fir';
-    return { name, sigFmt, cost: R.rtlCostFir(hInt, qf.fmt, sigFmt, { form: rtlForm }), text: R.genFirSv(hInt, qf.fmt, sigFmt, { overflow: q.overflow, form: rtlForm, moduleName: name }),
+    return { name, sigFmt, coefFmt: qf.fmt, cost: R.rtlCostFir(hInt, qf.fmt, sigFmt, { form: rtlForm }), text: R.genFirSv(hInt, qf.fmt, sigFmt, { overflow: q.overflow, form: rtlForm, moduleName: name }),
       expect: x => D.firFixedSim(hInt.map(v => v * qf.fmt.lsb), x.map(v => v * sigFmt.lsb), qf.fmt, sigFmt, 'nearest', { overflow: q.overflow }).y };
   }
   const qs = D.quantizeSos(d.sos, q.coef, q.round);
@@ -493,7 +493,7 @@ function rtlDesign(d, st) {
   if (qs.fmt.fracBits < 0) return { error: 'The coefficient format is coarser than 1; use more coefficient bits.' };
   const rows = qs.sq.map(s => [0, 1, 2, 4, 5].map(i => D.toInt(s[i], qs.fmt, 'nearest'))), name = 'filterlab_sos';
   const sosF = rows.map(r => [r[0], r[1], r[2], 1, r[3], r[4]].map((v, i) => i === 3 ? 1 : v * qs.fmt.lsb));
-  return { name, sigFmt, gain: qs.gain * Math.pow(2, q.headroom), cost: window.RTL.rtlCostSos(rows, qs.fmt, sigFmt, { errorFeedback: q.ef }),
+  return { name, sigFmt, coefFmt: qs.fmt, gain: qs.gain * Math.pow(2, q.headroom), cost: window.RTL.rtlCostSos(rows, qs.fmt, sigFmt, { errorFeedback: q.ef }),
     text: window.RTL.genSosSv(rows, qs.fmt, sigFmt, { overflow: q.overflow, headroomBits: q.headroom, errorFeedback: q.ef, moduleName: name }),
     expect: x => D.sosFixedSim(sosF, x.map(v => v * sigFmt.lsb), qs.fmt, sigFmt, 'nearest', { overflow: q.overflow, headroomBits: q.headroom, errorFeedback: q.ef }).y };
 }
@@ -514,12 +514,12 @@ function rtlCard(d) {
   const formCtl = d.kind === 'fir' ? `<div class="field" style="grid-template-columns:1fr 150px;margin-top:0"><label for="rtlForm">Structure</label><select id="rtlForm"><option value="direct">Direct form</option><option value="transposed">Transposed form</option></select></div>`
     : `<p class="hint" style="margin-top:0">Structure: direct-form-I biquad cascade${q.struct === 'direct' ? ' (exported as a cascade even though Structure above says single direct form)' : ''}.</p>`;
   if (r.error) return `<div class="panel card" id="rtlCard"><div class="card-head"><h2>Hardware export</h2></div>${formCtl}<div class="banner info">${esc(r.error)}</div></div>`;
-  return `<div class="panel card" id="rtlCard"><div class="card-head"><h2>Hardware export</h2><span class="tag">Generated, not synthesized, not simulated</span></div>
+  return `<div class="panel card" id="rtlCard"><div class="card-head"><h2>Hardware export</h2><span class="tag">Generated, not synthesized, not run in an HDL simulator</span></div>
     ${formCtl}
     <div class="tools play"><button class="btn" id="rtlCopy">Copy SystemVerilog</button><button class="btn" id="rtlDl">Download ${r.name}.sv</button><button class="btn" id="rtlTb">Download testbench and vectors</button></div>
     <p class="caption">A synthesizable SystemVerilog module whose arithmetic matches this tab's fixed-point simulation bit for bit: ${q.coef}-bit coefficients, a ${q.sig}-bit signal, ${q.overflow === 'wrap' ? 'wrap-around' : 'saturating'} overflow${d.kind === 'iir' ? `, ${q.headroom} bit${q.headroom === 1 ? '' : 's'} of headroom${q.ef ? ', error feedback' : ''}` : ''}.</p>
     <p class="caption">It assumes one clock, a synchronous active-high reset (<code>rst</code>), and one new sample per clock when <code>in_valid</code> is high. <code>out_data</code> and <code>out_valid</code> arrive one clock later. There is no pipelining, so the whole multiply-add chain must fit in one clock period.${d.kind === 'iir' ? ` The output is the cascade output: multiply it by ${fmtN(r.gain, 4)} (the leftover scaling gain${q.headroom ? ' times 2^' + q.headroom : ''}) downstream.` : ''}</p>
-    <p class="caption">"Not simulated": no HDL simulator was available where this was built. The test suite runs the generated text through an independent evaluator and compares it with the Python bit-true simulator; run the testbench with Icarus Verilog to check it yourself.</p>
+    <p class="caption">No standard HDL simulator was available where this was built. The test suite runs the generated text through Filterlab's own evaluators and compares them with the bit-true simulator, and <b>Simulate hardware</b> below does the same in your browser; run the testbench with Icarus Verilog to check it with a standard tool.</p>
     <div id="rtlCost"></div>
     <details class="data"><summary>Show the module</summary><pre class="code" id="rtlText"></pre></details></div>`;
 }
@@ -545,6 +545,112 @@ function wireRtl(d) {
     setTimeout(() => download(`${r.name}.hex`, window.RTL.vectorsHex(x, y, r.sigFmt)), 300);
   };
 }
+/* ---------- in-browser simulation of the generated SystemVerilog (web/rtlsim.js interprets the text) ---------- */
+const rsim = { input: 'impulse', len: 32, run: null };
+const RSIM_INPUTS = [['impulse', 'Impulse'], ['step', 'Step'], ['square', 'Square'], ['sine', 'Sine'], ['noise', 'Seeded noise']];
+function rsimStimulus(kind, n, sigFmt) { // full-scale integers; noise is seeded (seed 11) so a run is repeatable
+  const hi = Math.pow(2, sigFmt.word - 1) - 1, lo = -hi - 1, r = kind === 'noise' ? D.toneSignal(n, 1, [], 0.5, 11) : null;
+  return Array.from({ length: n }, (_, i) => kind === 'impulse' ? (i ? 0 : hi) : kind === 'step' ? hi : kind === 'square' ? (Math.floor(i / 8) % 2 ? lo : hi)
+    : kind === 'sine' ? Math.round(0.9 * hi * Math.sin(2 * Math.PI * i / 16)) : clamp(Math.round(r[i] * hi), lo, hi));
+}
+function rsimSignals(m, r) { // what the waveform shows: input, first state register, up to 3 accumulators, output
+  const sf = r.sigFmt.fracBits, af = sf + r.coefFmt.fracBits, has = n => !!m.sig[n];
+  const accs = has('acc') ? ['acc'] : Object.keys(m.sig).filter(n => /^s\d+_acc$/.test(n));
+  const show = [['in_data', sf], ...(has('xs') ? [['xs', sf]] : []), ...(has('x1') ? [['x1', sf]] : has('p1') ? [['p1', af]] : []), ...accs.slice(0, 3).map(n => [n, af]), ['out_data', sf]];
+  return { show, accs, af, sf, more: Math.max(accs.length - 3, 0) };
+}
+function rsimStart(r) { const sim = window.RTLSim.create(r.text); sim.step({ rst: 1, in_valid: 0, in_data: 0 }); return sim; }
+function rsimRun(run, k) { while (k-- > 0 && run.cycles.length < run.x.length) run.cycles.push(run.sim.step({ rst: 0, in_valid: 1, in_data: run.x[run.cycles.length] })); }
+function rsimEnsure(r) {
+  const key = `${r.text}|${rsim.input}|${rsim.len}`;
+  if (rsim.run && rsim.run.key === key) return rsim.run;
+  try {
+    const sim = rsimStart(r), x = rsimStimulus(rsim.input, rsim.len, r.sigFmt);
+    rsim.run = { key, sim, x, model: Array.from(r.expect(x), v => Math.round(v / r.sigFmt.lsb)), cycles: [], cursor: null, sigs: rsimSignals(sim.module, r) };
+    rsimRun(rsim.run, Infinity);
+  } catch (e) { rsim.run = { key, error: e.message }; }
+  return rsim.run;
+}
+const rsimSame = (run, i) => run.cycles[i].after.out_data !== null && Number(run.cycles[i].after.out_data) === run.model[i];
+function rsimCompare(run) {
+  const k = run.cycles.length, N = run.x.length; let first = -1, same = 0;
+  for (let i = 0; i < k; i++) if (rsimSame(run, i)) same++; else if (first < 0) first = i;
+  if (!k) return { html: `RTL output vs bit-true model: nothing simulated yet (${N} clocks to go).`, ok: true };
+  let s = `RTL output vs bit-true model: <b class="num">${same} of ${k}</b> samples identical${k < N ? ` so far (clock ${k} of ${N})` : ''}.`;
+  if (first >= 0) { const v = run.cycles[first].after.out_data; s += ` First mismatch at clock ${first}: RTL out_data = ${v === null ? 'X' : v}, model = ${run.model[first]}.`; }
+  return { html: s, ok: first < 0 };
+}
+const rsimReal = (v, f) => { const r = Number(v) / Math.pow(2, f); return Math.abs(r) >= 1e-4 || r === 0 ? String(+r.toPrecision(6)) : r.toExponential(3); };
+function rsimReadout(run) {
+  const k = run.cycles.length; if (!k) return 'Nothing simulated yet. Press <b>Step 1 clock</b> or <b>Run to end</b>.';
+  const n = clamp(run.cursor ?? k - 1, 0, k - 1), c = run.cycles[n], m = run.sim.module.sig;
+  const cell = (name, f, v) => `<span class="rd"><span class="nm">${name}</span> <span class="num">${v === null ? 'X' : v}</span> <span class="unit">Q${m[name].w - 1 - f}.${f} = ${v === null ? 'X' : rsimReal(v, f)}</span></span>`;
+  const y = c.after.out_data, ok = rsimSame(run, n);
+  return `<div><b>Clock ${n}</b> <span class="unit">(values before its rising edge)</span></div><div class="rds">${run.sigs.show.map(([nm, f]) => cell(nm, f, c.before[nm])).join('')}</div>
+    <div>At the rising edge, out_data takes <b class="num">${y === null ? 'X' : y}</b>; the bit-true model says <b class="num">${run.model[n]}</b> <span class="${ok ? 'good' : 'bad'}">${ok ? 'identical' : 'different'}</span>.</div>`;
+}
+function rsimWave(run) {
+  const el = $('#rsimWave'), W = Math.max(el.clientWidth || 600, 260), lab = W < 520 ? 66 : 92, N = run.x.length, k = run.cycles.length;
+  const cw = (W - lab - 6) / (N + 1), X = t => lab + t * cw, rows = [{ name: 'clk', h: 18 }, ...run.sigs.show.map(([name]) => ({ name, h: 40 }))];
+  let y = 6; for (const r of rows) { r.y = y; y += r.h + 10; } const H = y;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true"><rect class="wcol" y="2" height="${H - 4}" width="${Math.max(cw, 2)}" x="-99"/>`;
+  for (const r of rows) s += `<text class="wl" x="4" y="${r.y + r.h / 2 + 4}">${r.name}</text><line class="wz" x1="${lab}" x2="${W - 6}" y1="${r.y + r.h / 2}" y2="${r.y + r.h / 2}"/>`;
+  const ck = rows[0];   // clock n: high for the first half, falls, rises again at its end (the edge that stores out_data)
+  if (cw >= 4) { let d = `M${X(0)} ${ck.y}`; for (let n = 0; n < k; n++) d += `H${X(n + .5)}V${ck.y + ck.h}H${X(n + 1)}V${ck.y}`; s += `<path class="wclk" d="${d}"/>`; }
+  else if (k) s += `<rect class="wband" x="${X(0)}" y="${ck.y + 3}" width="${X(k) - X(0)}" height="${ck.h - 6}"/>`;
+  rows.slice(1).forEach(r => {
+    const vals = []; for (let n = 0; n < k; n++) vals.push(run.cycles[n].before[r.name]);
+    if (k && (r.name === 'out_data' || run.sim.module.regs.includes(r.name))) vals.push(run.cycles[k - 1].after[r.name]);   // registers also have a value after the last edge
+    const big = vals.reduce((a, v) => v === null ? a : Math.max(a, Math.abs(Number(v))), 1), mid = r.y + r.h / 2, Y = v => mid - Number(v) / big * (r.h / 2 - 2);
+    let d = '', pen = false;
+    vals.forEach((v, n) => { if (v === null) { s += `<rect class="wx" x="${X(n)}" y="${r.y}" width="${cw}" height="${r.h}"/>`; pen = false; return; } d += `${pen ? 'V' : `M${X(n).toFixed(1)} `}${Y(v).toFixed(1)}H${X(n + 1).toFixed(1)}`; pen = true; });
+    s += `<path class="wtr${r.name === 'out_data' ? ' out' : ''}" d="${d}"/>`;
+    if (r.name === 'out_data') for (let n = 0; n < k; n++) if (!rsimSame(run, n)) s += `<rect class="wbad" x="${X(n + 1)}" y="${r.y}" width="${Math.max(cw, 2)}" height="${r.h}"/>`;
+  });
+  el.innerHTML = s + '</svg>';
+  const col = $('.wcol', el), place = () => { const n = clamp(run.cursor ?? k - 1, 0, k - 1); col.setAttribute('x', k ? X(n) : -99); $('#rsimRead').innerHTML = rsimReadout(run); };
+  place();
+  const at = ev => { const r = el.firstElementChild.getBoundingClientRect(); return Math.floor(((ev.clientX - r.left) * (W / r.width) - lab) / cw); };
+  el.onpointermove = ev => { if (!k) return; const n = at(ev); if (n >= 0 && n < k && n !== run.cursor) { run.cursor = n; place(); } };
+  el.onkeydown = ev => {
+    const step = { ArrowLeft: -1, ArrowRight: 1, PageUp: -10, PageDown: 10 }[ev.key], cur = clamp(run.cursor ?? k - 1, 0, k - 1);
+    const n = ev.key === 'Home' ? 0 : ev.key === 'End' ? k - 1 : step ? cur + step : null; if (n === null || !k) return;
+    ev.preventDefault(); run.cursor = clamp(n, 0, k - 1); place();
+  };
+}
+function rtlSimCard(d) {
+  if (rtlDesign(d, state).error) return '';
+  return `<div class="panel card" id="rsimCard"><div class="card-head"><h2>Simulate hardware</h2><span class="tag">Interpreted in your browser</span></div>
+    <div class="rsim-ctl"><div class="field"><label for="rsimIn">Input</label><select id="rsimIn">${RSIM_INPUTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+      <div class="field"><label for="rsimLen">Samples (16 to 256)</label><input id="rsimLen" type="number" min="16" max="256" step="1" inputmode="numeric"></div></div>
+    <div class="tools play"><button class="btn" id="rsimReset">Reset</button><button class="btn" id="rsimStep">Step 1 clock</button><button class="btn" id="rsimRun">Run to end</button></div>
+    <p class="rsim-cmp" id="rsimCmp" role="status"></p>
+    <div class="wave" id="rsimWave" tabindex="0" role="group" aria-label="Waveform. Left and right arrow keys move the cursor one clock; Home and End jump to the ends." aria-describedby="rsimRead"></div>
+    <div class="wave-read num" id="rsimRead"></div>
+    <p class="caption">Simulated in your browser by Filterlab's interpreter of the generated SystemVerilog. Not run in a standard HDL simulator, not synthesized.</p>
+    <p class="caption">The interpreter parses the module text above and runs it one clock at a time with SystemVerilog's signed-arithmetic and width rules; the bit-true model is this tab's fixed-point simulation. Both the interpreter and the generator were written for Filterlab, so agreement here is weaker evidence than a third-party simulator. Running the downloaded testbench in Icarus Verilog or another standard simulator closes that gap.</p>
+    <div id="rsimTable"></div></div>`;
+}
+function wireRtlSim(d) {
+  const r = rtlDesign(d, state); if (r.error || !$('#rsimCard')) return;
+  const run = rsimEnsure(r);
+  $('#rsimIn').value = rsim.input; $('#rsimLen').value = rsim.len;
+  $('#rsimIn').onchange = e => { rsim.input = e.target.value; wireRtlSim(d); };
+  $('#rsimLen').onchange = e => { rsim.len = clamp(Math.round(+e.target.value) || 32, 16, 256); wireRtlSim(d); };
+  if (run.error) { $('#rsimCmp').innerHTML = `<span class="bad">Could not simulate: ${esc(run.error)}</span>`; ['#rsimReset', '#rsimStep', '#rsimRun'].forEach(b => $(b).setAttribute('aria-disabled', 'true')); return; }
+  const draw = () => {
+    const c = rsimCompare(run), done = run.cycles.length >= run.x.length;
+    $('#rsimCmp').innerHTML = c.html; $('#rsimCmp').className = 'rsim-cmp ' + (c.ok ? 'good' : 'bad');
+    $('#rsimStep').setAttribute('aria-disabled', done); $('#rsimRun').setAttribute('aria-disabled', done);
+    rsimWave(run);
+    const sg = run.sigs, hd = ['Clock', 'in_data', ...sg.accs, 'out_data after edge', 'Model', 'Same'];
+    $('#rsimTable').innerHTML = tableDetails(hd, run.cycles.map((c, n) => [n, c.before.in_data, ...sg.accs.map(a => c.before[a] ?? 'X'), c.after.out_data ?? 'X', run.model[n], rsimSame(run, n) ? 'yes' : '<b class="bad">no</b>']), 'Show the simulated values as a table');
+  };
+  $('#rsimReset').onclick = () => { run.sim = rsimStart(r); run.cycles = []; run.cursor = null; draw(); };
+  $('#rsimStep').onclick = () => { rsimRun(run, 1); run.cursor = null; draw(); };
+  $('#rsimRun').onclick = () => { rsimRun(run, Infinity); run.cursor = null; draw(); };
+  draw();
+}
 function renderQuant(d) {
   const st = state, q = st.q, v = $('#view'), qa = quantAnalysis(d, st), nyq = st.fs / 2, iir = d.kind === 'iir';
   const sliderBlock = (id, label, min, max, val, big) => `<div class="slider"><label for="${id}">${label}</label><span class="big num">${big}</span><input type="range" id="${id}" min="${min}" max="${max}" value="${val}"></div>`;
@@ -566,12 +672,13 @@ function renderQuant(d) {
     <div class="col"><div class="panel card"><div class="card-head"><h2>Poles and zeros</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)' }, { label: 'Quantized', color: 'var(--s2)' }])}<div class="chart" id="qPZ"></div><p class="caption">Rounding moves poles and zeros. ${iir ? 'A pole that reaches the unit circle makes the filter ring forever or blow up; high-order direct form is far more sensitive than a cascade of biquads.' : 'An FIR filter has no poles to move, so it stays stable at any word length; only its zeros, and so its stopband, shift.'}</p></div>
       ${iir && q.struct === 'sos' ? `<div class="panel card"><div class="card-head"><h2>Inside one biquad</h2></div>${dfDiagram(q.ef)}<p class="caption">Each section of the cascade rounds once, at Q. That rounding error (variance q²/12, with q one step of the ${q.sig}-bit signal) feeds back through −a₁ and −a₂, so the section's own poles amplify it before the later sections filter it.${q.ef ? ' Error feedback (dashed) subtracts round(a₁)·r[n−1] + round(a₂)·r[n−2] before rounding, which cancels most of that amplification when the poles sit near z = 1.' : ''}</p></div>` : ''}
       ${rtlCard(d)}
+      ${rtlSimCard(d)}
       <div class="panel card"><div class="card-head"><h2>Rounding effects</h2></div>${quantScore(d, qa)}<p class="caption">Coefficient rounding changes which filter you get. Round-off noise is separate: it is the error added every time the arithmetic rounds a result, measured here on a test signal and compared with theory.</p></div></div></div>`;
   $('#qRound').value = q.round; if (iir) $('#qStruct').value = q.struct;
   const upd = () => renderQuant(current);
   $('#qCoef').oninput = e => { q.coef = +e.target.value; upd(); focusRestore('qCoef'); }; $('#qSig').oninput = e => { q.sig = +e.target.value; upd(); focusRestore('qSig'); };
   $('#qRound').onchange = e => { q.round = e.target.value; upd(); }; if (iir) $('#qStruct').onchange = e => { q.struct = e.target.value; upd(); };
-  wireRtl(d);
+  wireRtl(d); wireRtlSim(d);
   $('#qOver').value = q.overflow; $('#qOver').onchange = e => { q.overflow = e.target.value; upd(); };
   if (iir) { $('#qHead').oninput = e => { q.headroom = +e.target.value; upd(); focusRestore('qHead'); }; $('#qEF').onchange = e => { q.ef = e.target.checked; upd(); focusRestore('qEF'); }; }
   const fr = Array.from(d.resp.f), y = Array.from(qa.resp.db);
@@ -711,7 +818,7 @@ function init() {
   $$('.tabs button').forEach(b => b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); }));
   buildControls(); syncControls();
   let rt; new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => current && render(), 120); }).observe($('#view'));
-  render(); window.__filterlab = { state, designFilter, sig, get current() { return current; } };
+  render(); window.__filterlab = { state, designFilter, sig, rsim, get current() { return current; } };
 }
 document.addEventListener('DOMContentLoaded', init);
 })();

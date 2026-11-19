@@ -119,3 +119,38 @@ Format: decision / why / rejected alternative.
 - **Themes. Remembered per viewer** in `localStorage` (`filterlab.theme`), with try/catch on read and write; if storage is blocked, the theme still applies for the visit. With no stored choice, the system light/dark preference picks Instrument light or dark, as before.
 - **Themes. Not built:** Neumorphism, Pixel Art, Maximalism and Surrealism. Each trades legibility of the data (low-contrast embossing, coarse pixels, competing ornament, distortion) for style, which this tool cannot afford. Any other theme requested later is logged as "later".
 - **Themes. Brief over a rule:** Phosphor is "near-black with one bright accent" and Paper is "warm cream with orange", both patterns the previous critique listed as generic tells. The brief asks for them explicitly, so they ship as opt-in themes, and the default stays Instrument.
+- **Interaction a. Linked cursor.** Response-tab magnitude, phase or group delay, and the pole-zero plot share one frequency.
+  - Hovering any of them shows exact readouts on all three. The pole-zero plot marks the point e^{jω} on the unit circle and shows |H| and phase there.
+  - Each plot is focusable, and ←/→ (Shift for bigger steps) drive the same cursor.
+  - Measured at 256 taps over 60 pointer moves: the broadcast to the other plots takes 1.1 ms median, 1.6 ms p95.
+- **Interaction b. Scrubbing.** The Quantization sliders (coefficient and signal word length, headroom) re-render at most once per frame. The controls block is kept, so a mouse drag is never cut off, and only the plots below are redrawn; before, every input event rebuilt the whole tab, including the slider under the pointer.
+  - The previous quantized response stays faint behind the new one, with a "Previous setting (faint)" legend entry.
+  - A new order slider (manual order) scrubs the Response tab the same way, with "Previous order (faint)".
+  - Timings at 256 taps: order scrub about 65 ms per frame; word-length scrub 95-145 ms per frame.
+  - FIR zeros are now computed lazily (the same `polyRoots`, on first use), because root-finding a 256-tap FIR takes about 1 s. While a long FIR (more than 64 taps) is scrubbed, its pole-zero plot shows "redraws when you let go" and redraws once on release. Releasing a 256-tap word-length scrub costs about 1 s for that one redraw.
+- **Interaction c. Transitions.**
+  - The main magnitude trace morphs between designs (WAAPI on the SVG `d` property, 220 ms ease-out). It does so only when the command structure matches, and never during a drag or scrub.
+  - Spec-check and rounding readouts count from the old value to the new one in 220 ms and end on the exact original text.
+  - A details panel reveals only when the reader opens it, not when a redraw re-creates it.
+  - Nothing plays on load, and with reduced motion nothing animates. `ui_sweep` checks both states through `setMotion`.
+- **Interaction d. Keyboard.**
+  - Shortcuts: 1-4 tabs, T theme, S/R step or run the simulator, G tour, D spec sheet, ? help.
+  - They are ignored while typing in a field or a dialog, or with Ctrl/Alt/Meta held.
+  - The help is a native `<dialog>` (focus trap and Esc built in), opened by ? or the header "?" button.
+- **Interaction e. Guided tour** (StageShow is absent, so built by hand):
+  - Six steps: design, shape on the plot, spec check, quantize, export, simulate.
+  - It starts only from "Take the tour" or G, and a reload never opens it.
+  - Keys: ←/→ move between steps, Tab stays inside the card, Esc or "Skip tour" ends it.
+  - Steps 1 and 4 load a demo design (Chebyshev I low-pass, 12-bit coefficients). The tour snapshots your design first and restores it on Finish or Skip, then returns focus.
+  - The ring and card glide in 200 ms only with motion allowed.
+  - `ui_sweep` walks it keyboard-only with real key presses.
+- **Interaction f. Spec sheet (SVG)** (dimensional-drawing is absent, so built by hand).
+  - The "Spec sheet (SVG)" button on Spec check, or D, downloads a drawing with:
+    - the magnitude plot;
+    - spec limits (dashed);
+    - a chain dimension of the band edges;
+    - dimensioned attenuation and a leader for passband ripple;
+    - a title block with the design parameters, the measured values, and the app's own pass/fail wording ("Target 1 dB or less", "Over by / Short by", meets/misses).
+  - It also says the figures are measured by Filterlab's spec check on the floating-point design. Valid SVG, checked in `ui_sweep`.
+- **Interaction g. Pole-zero "what-if" (stretch): not built.** Time went to verification instead.
+- **Found, not fixed (needs owner approval: `dsp/` and the pass/fail logic are out of scope).** Parks-McClellan fails for long filters at the default spec: at 160 taps and above, `web/dsp.js` `remez` returns all-zero coefficients, and `dsp/remez.py` returns NaN (divide by zero in the barycentric step). With a manual order of 160 or more, the app then shows an empty response and the Spec check marks ✓ "0 dB ripple, 240 dB attenuation", which is a false pass. Auto mode (36 taps) never gets there. The fix belongs in `remez` (and the spec check should reject an all-zero or non-finite filter). The new order slider allows up to 256 taps for FIR; Remez is broken above about 150 taps, so treat those results as invalid until this is fixed.

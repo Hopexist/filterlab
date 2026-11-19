@@ -158,6 +158,82 @@ const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
       await p.evaluate(() => { const rsim = window.__filterlab.rsim; rsim.run = null; rsim.input = 'impulse'; rsim.len = 64; });
     }
 
+    // ---- interaction (auto/ui-interactive): every check drives the real page; a console error anywhere fails the sweep ----
+    await p.goto(fileUrl('web/index.html')); await p.wait(500);
+    await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'cheby1', btype: 'lowpass', fs: 8000, edges: [1000, 1500], rp: 1, rs: 60, orderMode: 'auto', tab: 'response' }); Object.assign(s.q, { coef: 16, sig: 16, ef: false, headroom: 0, overflow: 'saturate' }); });
+    await p.click('[data-tab=time]'); await p.click('[data-tab=response]'); await p.wait(300);
+    // a. linked cursor: hovering the magnitude plot shows the same frequency on phase and on the pole-zero plot
+    { const b = await p.box('#cMag svg'); await p.mouse('mouseMoved', b.x + b.width * 0.75, b.y + b.height * 0.55); await p.wait(80);
+      const lc = await p.evaluate(() => { const hz = id => (document.querySelector(id + ' .tip')?.textContent.match(/^([\d.]+) Hz/) || [])[1];
+        return { mag: hz('#cMag'), ph: hz('#cPh'), pz: hz('#cPZ'), pzShown: document.querySelector('#cPZ .fcur')?.getAttribute('visibility') }; });
+      console.log('linked cursor:', JSON.stringify(lc));
+      if (!lc.mag || lc.mag !== lc.ph || lc.mag !== lc.pz || lc.pzShown !== 'visible') problems.push(`linked cursor: magnitude, phase and pole-zero disagree or are missing (${JSON.stringify(lc)})`);
+      await p.evaluate(() => document.querySelector('#cPh svg').focus()); await p.press('ArrowLeft'); await p.press('ArrowLeft');
+      const kb = await p.evaluate(() => [document.querySelector('#cMag .tip').hidden, document.querySelector('#cPh .tip').textContent.match(/^([\d.]+) Hz/)?.[1], document.querySelector('#cMag .tip').textContent.match(/^([\d.]+) Hz/)?.[1]]);
+      if (kb[0] || !kb[1] || kb[1] !== kb[2]) problems.push(`linked cursor: arrow keys on a focused plot do not move the shared cursor (${JSON.stringify(kb)})`); }
+    // b. scrub: the dragged slider survives, the previous trace is drawn faint, and release redraws the pole-zero plot
+    await p.click('[data-tab=quant]'); await p.wait(300);
+    { const sc = await p.evaluate(async () => { const el = document.getElementById('qCoef'), frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        for (const v of [14, 12, 10]) { el.value = v; el.dispatchEvent(new Event('input')); await frame(); }
+        const out = { same: document.getElementById('qCoef') === el, ghost: document.querySelectorAll('#qMag path.trace.ghost').length, big: document.getElementById('qCoefBig').textContent.trim(), legend: document.querySelector('#qBody .legend').textContent };
+        el.dispatchEvent(new Event('change')); await frame(); out.afterRelease = { same: document.getElementById('qCoef') === el, pz: !!document.querySelector('#qPZ svg') }; return out; });
+      console.log('scrub:', JSON.stringify(sc));
+      if (!sc.same || sc.ghost !== 1 || !/^10 bits/.test(sc.big) || !/Previous setting \(faint\)/.test(sc.legend) || !sc.afterRelease.same || !sc.afterRelease.pz) problems.push(`scrub: slider kept / faint previous trace / live readout / release redraw failed (${JSON.stringify(sc)})`); }
+    // c. transitions: none at all under reduced motion (the headless default); all of them with motion allowed
+    { await p.setMotion('reduce'); await p.evaluate(() => { window.__filterlab.state.rs = 55; document.querySelector('[data-tab=time]').click(); document.querySelector('[data-tab=response]').click(); });
+      const still = await p.evaluate(() => document.getAnimations().length);
+      await p.setMotion('no-preference'); await p.evaluate(() => { window.__filterlab.state.method = 'butter'; document.querySelector('[data-tab=time]').click(); document.querySelector('[data-tab=response]').click(); });
+      const moving = await p.evaluate(() => document.getAnimations().map(a => a.effect.target.tagName.toLowerCase()));
+      await p.wait(400); const settled = await p.evaluate(() => [...document.querySelectorAll('#view .score .val')].map(v => v.textContent.trim()));
+      const exact = await p.evaluate(() => { const d = window.__filterlab.current; return [d.m.ripple, d.m.atten]; });
+      console.log('motion: reduced', still, 'animations; allowed', JSON.stringify(moving), '; readouts after', JSON.stringify(settled));
+      if (still !== 0) problems.push(`reduced motion still ran ${still} animation(s)`);
+      if (!moving.includes('path') || !moving.includes('div')) problems.push(`transitions missing with motion allowed (${JSON.stringify(moving)})`);
+      if (parseFloat(settled[0]) !== +exact[0].toFixed(3) || parseFloat(settled[1]) !== +exact[1].toFixed(1)) problems.push(`readouts did not settle on the exact values (${JSON.stringify(settled)} vs ${JSON.stringify(exact)})`);
+      await p.setMotion('reduce'); }
+    // d. keyboard: shortcuts and the help dialog, with real key presses
+    { await p.evaluate(() => document.activeElement && document.activeElement.blur());
+      await p.press('3'); await p.wait(250); const tab3 = await p.evaluate(() => window.__filterlab.state.tab);
+      await p.evaluate(() => document.getElementById('rsimReset').click()); await p.evaluate(() => document.activeElement.blur()); await p.press('s'); await p.press('s');
+      const cmp = await p.evaluate(() => document.getElementById('rsimCmp').textContent);
+      const th0 = await p.evaluate(() => document.documentElement.dataset.theme); await p.press('t'); const th1 = await p.evaluate(() => document.documentElement.dataset.theme);
+      await p.evaluate(() => document.getElementById('theme').value = 'light'); await p.evaluate(() => { const s = document.getElementById('theme'); s.dispatchEvent(new Event('change')); document.activeElement.blur(); });
+      await p.press('?'); const helpOpen = await p.evaluate(() => document.getElementById('help').open); await p.press('Escape'); const helpClosed = !(await p.evaluate(() => document.getElementById('help').open));
+      await p.evaluate(() => { const i = document.getElementById('sigF') || document.querySelector('#controls input[type=number]'); i.focus(); }); await p.press('2'); const typingSafe = await p.evaluate(() => window.__filterlab.state.tab);
+      console.log('shortcuts:', JSON.stringify({ tab3, cmp, th0, th1, helpOpen, helpClosed, typingSafe }));
+      if (tab3 !== 'quant') problems.push('shortcut 3 did not open the Quantization tab');
+      if (!/2 of 2 samples identical so far/.test(cmp)) problems.push(`shortcut S did not step the simulator one clock at a time (${cmp})`);
+      if (th0 === th1) problems.push('shortcut T did not change the theme');
+      if (!helpOpen || !helpClosed) problems.push('? did not open the shortcuts dialog, or Escape did not close it');
+      if (typingSafe !== 'quant') problems.push('a shortcut fired while typing in a field'); }
+    // e. guided tour, keyboard only: G opens it, arrow keys walk it, Tab reaches Finish, Enter ends it and restores the design
+    { await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'remez', rs: 55 }); document.querySelector('[data-tab=time]').click(); document.activeElement.blur(); });
+      await p.press('g'); await p.wait(200);
+      const t1 = await p.evaluate(() => ({ at: window.__filterlab.tourAt, focus: document.activeElement.id, method: window.__filterlab.state.method }));
+      for (let i = 0; i < 5; i++) { await p.press('ArrowRight'); await p.wait(120); }
+      const t6 = await p.evaluate(() => ({ at: window.__filterlab.tourAt, tab: window.__filterlab.state.tab, step: document.getElementById('tourStep').textContent, ring: getComputedStyle(document.querySelector('.tour-ring')).opacity }));
+      await p.screenshot(path.join(SHOTS, 'tour-step6.png'), { fullPage: false });
+      await p.press('Tab'); await p.press('Tab'); await p.press('Tab'); const onFinish = await p.evaluate(() => document.activeElement.id + ':' + document.activeElement.textContent);
+      await p.press('Enter'); await p.wait(250);
+      const end = await p.evaluate(() => ({ at: window.__filterlab.tourAt, hidden: document.getElementById('tour').hidden, method: window.__filterlab.state.method, rs: window.__filterlab.state.rs, tab: window.__filterlab.state.tab }));
+      console.log('tour (keyboard only):', JSON.stringify({ t1, t6, onFinish, end }));
+      if (t1.at !== 0 || t1.focus !== 'tourTitle' || t1.method !== 'cheby1') problems.push(`tour: G did not open step 1 with focus on its title (${JSON.stringify(t1)})`);
+      if (t6.at !== 5 || t6.tab !== 'quant' || t6.step !== 'Step 6 of 6' || t6.ring !== '1') problems.push(`tour: arrow keys did not reach step 6 on the simulator (${JSON.stringify(t6)})`);
+      if (onFinish !== 'tourNext:Finish') problems.push(`tour: Tab did not reach the Finish button (${onFinish})`);
+      if (!end.hidden || end.at !== -1 || end.method !== 'remez' || end.rs !== 55 || end.tab !== 'time') problems.push(`tour: Finish did not close it and restore the design (${JSON.stringify(end)})`);
+      const auto = await p.evaluate(() => { location.reload(); return true; }); await p.wait(600);
+      if (!(await p.evaluate(() => document.getElementById('tour').hidden))) problems.push('tour: it opened on page load (it must never auto-play)'); }
+    // f. spec sheet: valid SVG with dimension lines, the title block, and the same pass/fail wording as the app
+    { await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'cheby1', btype: 'lowpass', fs: 8000, edges: [1000, 1500], rp: 1, rs: 60, orderMode: 'auto' }); document.querySelector('[data-tab=time]').click(); document.querySelector('[data-tab=response]').click(); });
+      const ss = await p.evaluate(() => { const F = window.__filterlab, d = F.current, svg = F.specSheetSvg(d, F.state), doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+        const okWord = (ok) => ok ? '✓ meets' : '✕ misses';
+        return { xml: !doc.querySelector('parsererror'), dims: doc.querySelectorAll('line.dim').length, texts: doc.documentElement.textContent, rip: String(+d.m.ripple.toFixed(3)), att: String(+d.m.atten.toFixed(1)), want: [okWord(d.passRipple), okWord(d.stopOk)], button: !!document.getElementById('specSheet') }; });
+      const has = t => ss.texts.includes(t);
+      console.log('spec sheet:', JSON.stringify({ xml: ss.xml, dims: ss.dims, ripple: ss.rip, atten: ss.att, button: ss.button }));
+      if (!ss.xml || ss.dims < 4 || !ss.button) problems.push('spec sheet: not valid SVG, too few dimension lines, or no download button');
+      if (!has(`passband ripple ${ss.rip} dB`) || !has(`attenuation ${ss.att} dB`) || !has('Target 1 dB or less') || !has('Target 60 dB or more') || !ss.want.every(has)) problems.push('spec sheet: measured values or the pass/fail wording do not match the app');
+      if (!has("Measured by Filterlab's spec check")) problems.push('spec sheet: missing its provenance line'); }
+
     // Signal tab: test tones render with a finite fixed-point SNR; a WAV loads through the file input; a bad file says why
     await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'remez', btype: 'lowpass', fs: 8000, edges: [1000, 1500], rp: 1, rs: 60, orderMode: 'auto' }); Object.assign(s.q, { coef: 16, sig: 16, ef: false, headroom: 0, overflow: 'saturate' }); });
     await p.click('[data-tab=signal]'); await p.wait(600);

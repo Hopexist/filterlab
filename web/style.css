@@ -190,7 +190,7 @@ table.t th { color: var(--ink-3); font-weight: 500; }
 @media (prefers-reduced-motion: no-preference) {
   #view.enter { animation: view-in 160ms cubic-bezier(.2, .7, .3, 1); }
   @keyframes view-in { from { opacity: .35; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-  details[open] > :not(summary) { animation: open-in 140ms ease-out; }
+  details.opening[open] > :not(summary) { animation: open-in 140ms ease-out; }   /* only when the reader opens it */
   @keyframes open-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
   .btn, .tabs button, .seg button, details > summary { transition: background-color 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out; }
 }
@@ -299,3 +299,36 @@ details.data > summary:hover { color: var(--ink); }
 }
 
 .theme-pick { border: 1px solid var(--line); background: var(--panel); border-radius: var(--r-sm); padding: 6px 10px; min-height: 40px; }
+
+/* linked frequency cursor on the pole-zero plot */
+.chart .fray { stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.chart .fdot { fill: var(--screen); stroke: var(--accent); stroke-width: 2.2; }
+.chart svg[tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* scrubbing: the previous trace stays faint behind the live one */
+.chart .trace.ghost { opacity: .3; filter: none !important; }
+.legend span.ghost { opacity: .55; }
+.ordscrub { margin-top: 6px; }
+
+/* header actions wrap on narrow screens */
+.top-actions { flex-wrap: wrap; justify-content: flex-end; }
+.btn.icon { min-width: 40px; padding: 7px 0; font: 600 15px var(--display); }
+/* help dialog */
+dialog#help { border: 1px solid var(--bezel); border-radius: var(--r); background: var(--panel); color: var(--ink); padding: 18px 20px; max-width: min(560px, calc(100vw - 32px)); }
+dialog#help::backdrop { background: rgba(0, 0, 0, .45); }
+dialog#help h2 { font-size: 18px; margin-bottom: 10px; }
+.keys td { text-align: left !important; padding: 6px 8px; }
+kbd { font: 12px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 1px 5px; background: var(--panel-2); }
+/* guided tour */
+.tour { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+.tour-ring { position: fixed; border: 2px solid var(--accent); border-radius: var(--r); box-shadow: 0 0 0 9999px rgba(0, 0, 0, .38); pointer-events: none; }
+.tour-card { position: fixed; width: min(360px, calc(100vw - 24px)); background: var(--panel); border: 1px solid var(--bezel); border-radius: var(--r); padding: 14px 16px; pointer-events: auto; box-shadow: 0 6px 24px rgba(0, 0, 0, .25); }
+.tour-card h2 { font-size: 17px; margin: 2px 0 6px; outline: none; }
+.tour-card p { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+.tour-step { font-size: 12px !important; color: var(--ink-3) !important; }
+.tour-nav { display: flex; gap: 8px; margin-top: 12px; }
+.tour-nav span { flex: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .tour-ring, .tour-card { transition: left 200ms cubic-bezier(.2, .7, .3, 1), top 200ms cubic-bezier(.2, .7, .3, 1), width 200ms cubic-bezier(.2, .7, .3, 1), height 200ms cubic-bezier(.2, .7, .3, 1); }
+  dialog#help[open] { animation: open-in 140ms ease-out; }
+}

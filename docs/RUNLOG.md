@@ -27,3 +27,4 @@
 # Run log: auto/ui-polish
 
 - Start: 2026-11-19T19:54:00Z. Hard stop: 21:24:00Z. Branch `auto/ui-polish` from master e2ad9ac (auto/rtl-sim merged).
+- 20:16Z tasks 1-7 committed, gate green each time; stretch (demo clip) skipped: Remotion/HyperFrames not installed and npx needs the network. STATUS.md written. Run ends.

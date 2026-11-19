@@ -1,37 +1,118 @@
 // Drives the real page: every method x response type (auto order) must meet its spec, then interaction checks.
-const { chromium } = require('playwright');
+// Exits 1 on any missed spec, failed interaction check, console error or page error.
+const { launch, fileUrl } = require('./browser');
+const path = require('path');
+const SHOTS = path.resolve(__dirname, '..', 'shots');
+
+const METHODS = ['remez', 'window', 'butter', 'cheby1', 'cheby2', 'ellip'];
+const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
+
 (async () => {
-  const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
-  const p = await b.newPage({ viewport: { width: 1440, height: 1000 } }); const errs = [];
-  p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); }); p.on('pageerror', e => errs.push('PAGEERR ' + e.message));
-  await p.goto('file://' + process.cwd() + '/web/index.html'); await p.waitForTimeout(500);
-  const rows = await p.evaluate(() => {
-    const F = window.__filterlab, out = [];
-    for (const method of ['remez', 'window', 'butter', 'cheby1', 'cheby2'])
-      for (const btype of ['lowpass', 'highpass', 'bandpass', 'bandstop']) {
-        const st = F.state; Object.assign(st, { method, btype, fs: 8000, rp: 1, rs: method === 'window' ? 50 : 60, win: 'kaiser', orderMode: 'auto', edges: { lowpass: [1000, 1500], highpass: [1000, 1500], bandpass: [500, 1000, 2000, 2500], bandstop: [800, 1200, 2000, 2400] }[btype] });
-        const t0 = performance.now(); const d = F.designFilter(st, false);
-        out.push({ method, btype, size: d.size, ripple: +d.m.ripple.toFixed(3), atten: +d.m.atten.toFixed(1), ok: d.passRipple && d.stopOk, ms: Math.round(performance.now() - t0), poles: d.poles.length, zeros: d.zeros.length });
-      }
-    return out;
-  });
-  let bad = 0; for (const r of rows) { if (!r.ok) bad++; console.log((r.ok ? 'ok  ' : 'MISS'), r.method.padEnd(8), r.btype.padEnd(9), r.size.padEnd(22), `ripple ${r.ripple} dB, atten ${r.atten} dB`, `${r.ms}ms`); }
-  console.log(bad ? `${bad} designs missed spec` : 'all 20 designs meet spec');
-  // render every tab for an IIR bandpass to catch runtime errors
-  await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'cheby1', btype: 'bandpass', edges: [500, 1000, 2000, 2500], orderMode: 'auto' }); });
-  for (const tab of ['response', 'time', 'quant']) { await p.click(`[data-tab=${tab}]`); await p.waitForTimeout(250); }
-  // IIR direct form instability demo
-  await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'butter', btype: 'lowpass', edges: [200, 400], rp: 1, rs: 80, orderMode: 'auto' }); s.q.struct = 'direct'; s.q.coef = 12; });
-  await p.click('[data-tab=response]'); await p.click('[data-tab=quant]'); await p.waitForTimeout(500);
-  console.log('direct form banner:', await p.evaluate(() => (document.querySelector('.banner')?.textContent || 'none').slice(0, 130)));
-  await p.screenshot({ path: 'shots/iir-direct-unstable.png', fullPage: true });
-  // drag a band edge on the magnitude plot
-  await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'remez', btype: 'lowpass', edges: [1000, 1500], rp: 1, rs: 60 }); s.q.struct = 'sos'; });
-  await p.click('[data-tab=response]'); await p.waitForTimeout(300);
-  const h = await p.locator('.handle[data-key="1"] .tab').boundingBox(); const before = await p.evaluate(() => window.__filterlab.state.edges.slice());
-  await p.mouse.move(h.x + h.width / 2, h.y + h.height / 2); await p.mouse.down(); await p.mouse.move(h.x + h.width / 2 + 60, h.y + 10, { steps: 6 }); await p.mouse.up(); await p.waitForTimeout(500);
-  const after = await p.evaluate(() => ({ e: window.__filterlab.state.edges.slice(), size: window.__filterlab.current.size, input: document.getElementById('e1').value }));
-  console.log('drag stopband edge', before, '->', after.e, '| input shows', after.input, '|', after.size);
-  await p.screenshot({ path: 'shots/after-drag.png', fullPage: true });
-  await b.close(); console.log(errs.length ? 'ERRORS:\n' + errs.join('\n') : 'no console errors');
-})();
+  const { page: p, close } = await launch({ width: 1440, height: 1000 });
+  const problems = [];
+  try {
+    await p.goto(fileUrl('web/index.html')); await p.wait(500);
+    const rows = await p.evaluate((methods, btypes) => {
+      const F = window.__filterlab, out = [];
+      for (const method of methods)
+        for (const btype of btypes) {
+          const st = F.state; Object.assign(st, { method, btype, fs: 8000, rp: 1, rs: method === 'window' ? 50 : 60, win: 'kaiser', orderMode: 'auto', edges: { lowpass: [1000, 1500], highpass: [1000, 1500], bandpass: [500, 1000, 2000, 2500], bandstop: [800, 1200, 2000, 2400] }[btype] });
+          const t0 = performance.now(); const d = F.designFilter(st, false);
+          out.push({ method, btype, size: d.size, ripple: +d.m.ripple.toFixed(3), atten: +d.m.atten.toFixed(1), ok: !!(d.passRipple && d.stopOk), ms: Math.round(performance.now() - t0) });
+        }
+      return out;
+    }, METHODS, BTYPES);
+    for (const r of rows) {
+      if (!r.ok) problems.push(`${r.method} ${r.btype} missed spec`);
+      console.log(r.ok ? 'ok  ' : 'MISS', r.method.padEnd(8), r.btype.padEnd(9), String(r.size).padEnd(22), `ripple ${r.ripple} dB, atten ${r.atten} dB`, `${r.ms}ms`);
+    }
+    console.log(`${rows.length - problems.length} of ${rows.length} designs meet spec`);
+
+    // render every tab for an IIR bandpass to catch runtime errors
+    await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'cheby1', btype: 'bandpass', edges: [500, 1000, 2000, 2500], orderMode: 'auto' }); });
+    for (const tab of ['response', 'time', 'quant']) { await p.click(`[data-tab=${tab}]`); await p.wait(250); }
+
+    // IIR direct-form instability demo: the banner must appear
+    await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'butter', btype: 'lowpass', edges: [200, 400], rp: 1, rs: 80, orderMode: 'auto' }); s.q.struct = 'direct'; s.q.coef = 12; });
+    await p.click('[data-tab=response]'); await p.click('[data-tab=quant]'); await p.wait(500);
+    const banner = await p.evaluate(() => (document.querySelector('.banner')?.textContent || '').slice(0, 130));
+    console.log('direct form banner:', banner || 'none');
+    if (!banner) problems.push('direct-form instability banner missing');
+    await p.screenshot(path.join(SHOTS, 'iir-direct-unstable.png'));
+
+    // drag the stopband edge on the magnitude plot: the edge, the input box and the design must follow
+    await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'remez', btype: 'lowpass', edges: [1000, 1500], rp: 1, rs: 60 }); s.q.struct = 'sos'; });
+    await p.click('[data-tab=response]'); await p.wait(300);
+    const h = await p.box('.handle[data-key="1"] .tab'); const before = await p.evaluate(() => window.__filterlab.state.edges.slice());
+    await p.drag(h.x + h.width / 2, h.y + h.height / 2, h.x + h.width / 2 + 60, h.y + 10); await p.wait(500);
+    const after = await p.evaluate(() => ({ e: window.__filterlab.state.edges.slice(), size: window.__filterlab.current.size, input: document.getElementById('e1').value }));
+    console.log('drag stopband edge', before, '->', after.e, '| input shows', after.input, '|', after.size);
+    if (!(after.e[1] > before[1])) problems.push('dragging the stopband edge did not move it');
+    if (Math.abs(+after.input - after.e[1]) > 1) problems.push('edge input box does not match the dragged edge');
+    await p.screenshot(path.join(SHOTS, 'after-drag.png'));
+
+    // error feedback on a narrow low-pass must lower the measured noise and stay close to theory; wrap mode must render
+    await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'butter', btype: 'lowpass', edges: [80, 160], rp: 1, rs: 40, orderMode: 'auto' }); Object.assign(s.q, { struct: 'sos', coef: 20, sig: 16, ef: false, headroom: 0, overflow: 'saturate' }); });
+    await p.click('[data-tab=response]'); await p.click('[data-tab=quant]'); await p.wait(400);
+    const noiseRow = () => p.evaluate(() => { const r = [...document.querySelectorAll('.score .row')].find(x => x.querySelector('.lab')?.textContent === 'Round-off noise'); return r ? { db: parseFloat(r.querySelector('.val').textContent), ok: r.querySelector('.ic').classList.contains('ok') } : null; });
+    const off = await noiseRow(); await p.click('#qEF'); await p.wait(400); const on = await noiseRow();
+    console.log('error feedback: noise', off && off.db, 'dB ->', on && on.db, 'dB; theory agreement', on && on.ok);
+    if (!off || !on || !(off.db - on.db >= 6)) problems.push('error feedback did not lower the measured noise by 6 dB in the app');
+    if (on && !on.ok) problems.push('error-feedback noise is more than 3 dB from theory in the app');
+    await p.evaluate(() => { document.getElementById('qOver').value = 'wrap'; document.getElementById('qOver').dispatchEvent(new Event('change')); });
+    await p.wait(300); await p.screenshot(path.join(SHOTS, 'quant-ef-wrap.png'));
+    const diagram = await p.evaluate(() => !!document.querySelector('svg.df') && !!document.querySelector('svg.df .df-ef'));
+    console.log('DF-I diagram with error-feedback path:', diagram);
+    if (!diagram) problems.push('signal-flow diagram (with the error-feedback path) missing on the Quantization tab');
+
+    // compare mode: pin A as B, change the design, B must stay drawn dashed with its own legend entry
+    await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'cheby1', btype: 'lowpass', edges: [1000, 1500], rp: 1, rs: 60, orderMode: 'auto' }); });
+    await p.click('[data-tab=response]'); await p.wait(300); await p.click('#pinB'); await p.wait(200);
+    await p.evaluate(() => { const s = window.__filterlab.state; s.method = 'ellip'; }); await p.click('[data-tab=time]'); await p.click('[data-tab=response]'); await p.wait(300);
+    const cmp = await p.evaluate(() => ({ dashed: document.querySelectorAll('#cMag path.trace[stroke-dasharray]').length, legend: document.querySelector('#view .legend')?.textContent || '' }));
+    console.log('compare mode:', cmp.dashed, 'dashed trace,', JSON.stringify(cmp.legend.slice(0, 80)));
+    if (cmp.dashed !== 1 || !/B: Chebyshev I/.test(cmp.legend)) problems.push('compare mode did not draw the pinned design B');
+    await p.screenshot(path.join(SHOTS, 'compare.png'));
+    await p.click('#pinB');
+
+    // phone layout: tab bar fixed to the bottom of the viewport, no horizontal scrolling, 44 px targets
+    await p.setViewport(390, 844); await p.wait(400);
+    const phone = await p.evaluate(() => {
+      const t = document.querySelector('.tabs'), r = t.getBoundingClientRect(), small = [...document.querySelectorAll('.tabs button, .seg button, .controls summary')].filter(b => b.getBoundingClientRect().height > 0 && b.getBoundingClientRect().height < 44).length;
+      return { fixed: getComputedStyle(t).position === 'fixed', atBottom: Math.abs(r.bottom - innerHeight) < 2, overflow: document.documentElement.scrollWidth - innerWidth, small };
+    });
+    console.log('phone 390 px:', JSON.stringify(phone));
+    if (!phone.fixed || !phone.atBottom) problems.push('phone tab bar is not fixed to the bottom');
+    if (phone.overflow > 0) problems.push(`phone layout scrolls sideways by ${phone.overflow} px`);
+    if (phone.small) problems.push(`${phone.small} tab, segment or group controls are under 44 px tall on a phone`);
+    await p.setViewport(1440, 1000);
+
+    // Signal tab: test tones render with a finite fixed-point SNR; a WAV loads through the file input; a bad file says why
+    await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'remez', btype: 'lowpass', fs: 8000, edges: [1000, 1500], rp: 1, rs: 60, orderMode: 'auto' }); Object.assign(s.q, { coef: 16, sig: 16, ef: false, headroom: 0, overflow: 'saturate' }); });
+    await p.click('[data-tab=signal]'); await p.wait(600);
+    const snr = await p.evaluate(() => { const b = [...document.querySelectorAll('.caption b')].find(x => /dB/.test(x.textContent)); return b ? parseFloat(b.textContent) : NaN; });
+    console.log('signal tab, test tones: fixed vs float SNR', snr, 'dB');
+    if (!(snr > 40)) problems.push(`signal tab SNR missing or implausible (${snr})`);
+    await p.screenshot(path.join(SHOTS, 'signal-tones.png'));
+    const load = (bytes, name) => p.evaluate((b, n) => { const inp = document.getElementById('wavIn'), dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(b)], n, { type: 'audio/wav' })); inp.files = dt.files; inp.dispatchEvent(new Event('change')); }, bytes, name);
+    const mkWav = (fs, frames) => { const b = Buffer.alloc(44 + frames * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + frames * 2, 4); b.write('WAVE', 8); b.write('fmt ', 12); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(fs, 24); b.writeUInt32LE(fs * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(frames * 2, 40); for (let i = 0; i < frames; i++) b.writeInt16LE(Math.round(12000 * Math.sin(2 * Math.PI * 440 * i / fs) + 6000 * Math.sin(2 * Math.PI * 5000 * i / fs)), 44 + 2 * i); return Array.from(b); };
+    await load(mkWav(16000, 16000), 'tone.wav'); await p.wait(800);
+    const w = await p.evaluate(() => ({ fs: window.__filterlab.state.fs, info: document.getElementById('srcInfo').textContent, err: document.querySelector('[role=alert]')?.textContent || '' }));
+    console.log('WAV upload:', JSON.stringify(w));
+    if (w.fs !== 16000 || !/PCM 16-bit/.test(w.info) || w.err) problems.push('a valid 16-bit WAV did not load through the file input');
+    await p.screenshot(path.join(SHOTS, 'signal-wav.png'));
+    await load(Array.from(Buffer.from('definitely not a wav file')), 'notes.txt'); await p.wait(400);
+    const bad = await p.evaluate(() => document.querySelector('[role=alert]')?.textContent || '');
+    console.log('bad file message:', bad);
+    if (!/Could not read notes\.txt\. This is not a WAV file/.test(bad)) problems.push('a non-WAV file did not produce a clear error');
+    await p.evaluate(() => { window.__filterlab.sig.source = 'tones'; window.__filterlab.sig.error = ''; window.__filterlab.state.fs = 8000; window.__filterlab.state.edges = [1000, 1500]; });
+    await p.click('[data-tab=response]');
+  } catch (e) {
+    problems.push('script error: ' + e.message);
+  } finally {
+    problems.push(...p.errors);
+    await close();
+  }
+  console.log(problems.length ? `\nUI SWEEP FAILED (${problems.length}):\n  ` + problems.join('\n  ') : '\nui sweep passed, no console errors');
+  process.exit(problems.length ? 1 : 0);
+})().catch(e => { console.error(e.message); process.exit(1); });

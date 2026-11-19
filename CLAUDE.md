@@ -56,7 +56,7 @@ Run all of them before calling any task done.
 - Frequencies are in Hz and take an `fs` argument. Biquad (`sos`) rows are `[b0 b1 b2 1 a1 a2]`.
 - Qm.n means 1 sign bit + m integer bits + n fraction bits. Quantized biquads are peak-scaled per section
   (`scale_sos`) with the leftover gain applied once at the output; do not quantize unscaled narrow-band sections.
-- Remez supports odd lengths (type I) only, until the even-length work lands.
+- Remez designs types I-IV (`kind=` 'bandpass', 'hilbert', 'differentiator'); even lengths are type II/IV.
 - Order searches: Kaiser/Remez formulas are estimates; in auto mode, search until the measured response meets the spec.
 - Noise model: direct-form-I biquads, one rounding per section, each error shaped by that section's `1/A(z)` and then
   the remaining sections. Measured noise must stay within about 1-2 dB of theory in tests.

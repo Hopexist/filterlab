@@ -88,29 +88,50 @@ def fir_wordlength_sweep(h, words, passband_hz, stopband_hz, fs=2.0, n=4096):
     return out
 
 # ---------- bit-true simulation -----------------------------------------------------
-def simulate_fir_fixed(h, x, coef_fmt, sig_fmt):
+def _check_overflow(overflow):
+    if overflow not in ("saturate", "wrap"):
+        raise ValueError(f"overflow must be 'saturate' or 'wrap', not {overflow!r}")
+
+def _limit(v, lo_, hi_, overflow):
+    """Bring an integer (or int array) back into [lo_, hi_]: clamp, or two's-complement wrap."""
+    if overflow == "saturate": return np.clip(v, lo_, hi_) if isinstance(v, np.ndarray) else max(lo_, min(hi_, v))
+    return (v - lo_) % (hi_ - lo_ + 1) + lo_
+
+def simulate_fir_fixed(h, x, coef_fmt, sig_fmt, *, overflow="saturate"):
     """Direct-form FIR, exact wide accumulator, one rounding at the output.
+    overflow: "saturate" clamps the output word, "wrap" wraps it (two's complement).
     Returns (y_fixed, y_float_with_quantized_coefs, y_float_ideal)."""
+    _check_overflow(overflow)
     hi = to_int(h, coef_fmt); xi = to_int(x, sig_fmt)
     acc = np.convolve(xi, hi)[: len(xi)]
     sh = coef_fmt.frac_bits
     yi = (acc + (1 << (sh - 1))) >> sh if sh > 0 else acc
     lo_, hi_ = -(2 ** (sig_fmt.word - 1)), 2 ** (sig_fmt.word - 1) - 1
-    y = np.clip(yi, lo_, hi_) * sig_fmt.lsb
+    y = _limit(yi, lo_, hi_, overflow) * sig_fmt.lsb
     return y, np.convolve(xi * sig_fmt.lsb, hi * coef_fmt.lsb)[: len(xi)], np.convolve(x, h)[: len(x)]
 
-def simulate_sos_fixed(sos, x, coef_fmt, sig_fmt):
-    """Cascade of direct-form-I biquads; each section rounds once (after its accumulator)."""
-    xi = [int(v) for v in to_int(x, sig_fmt)]
+def simulate_sos_fixed(sos, x, coef_fmt, sig_fmt, *, overflow="saturate", headroom_bits=0, error_feedback=False):
+    """Cascade of direct-form-I biquads; each section rounds once (after its accumulator).
+    overflow: each section output is clamped ("saturate") or wrapped ("wrap", two's complement).
+    headroom_bits: the input is scaled by 2**-headroom_bits before it is quantized; multiply the
+    output by 2**headroom_bits (and the cascade gain) to undo it.
+    error_feedback: second-order error feedback with c1 = round(a1), c2 = round(a2):
+        acc' = acc - c1 r[n-1] - c2 r[n-2];  y = (acc' + half) >> sh;  r = acc' - (y << sh)
+    so the rounding noise is shaped by (1 + c1 z^-1 + c2 z^-2) / A(z)."""
+    _check_overflow(overflow)
+    xi = [int(v) for v in to_int(np.asarray(x, float) * 2.0 ** -headroom_bits, sig_fmt)]
     cs = [[int(v) for v in to_int(s[[0, 1, 2, 4, 5]], coef_fmt)] for s in sos]
     sh = coef_fmt.frac_bits; half = 1 << (sh - 1) if sh > 0 else 0
     lo_, hi_ = -(2 ** (sig_fmt.word - 1)), 2 ** (sig_fmt.word - 1) - 1
     cur = xi
     for b0, b1, b2, a1, a2 in cs:
-        x1 = x2 = y1 = y2 = 0; out = []
+        c1, c2 = ((a1 + half) >> sh, (a2 + half) >> sh) if error_feedback else (0, 0)   # round(a) as integers
+        x1 = x2 = y1 = y2 = r1 = r2 = 0; out = []
         for v in cur:
-            acc = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
-            y = max(lo_, min(hi_, (acc + half) >> sh))
+            acc = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2 - c1 * r1 - c2 * r2
+            yr = (acc + half) >> sh
+            y = _limit(yr, lo_, hi_, overflow)
+            if error_feedback: r2, r1 = r1, acc - (yr << sh)
             x2, x1, y2, y1 = x1, v, y1, y
             out.append(y)
         cur = out
@@ -129,13 +150,16 @@ def _energy(num_secs, den_secs, n=1 << 15):
     for a in den_secs: H = H / np.polyval(np.asarray(a, float)[::-1], z)
     return float(np.mean(np.abs(H) ** 2))
 
-def sos_noise_theory(sos, sig_fmt, input_quantized=True):
+def sos_noise_theory(sos, sig_fmt, input_quantized=True, *, error_feedback=False):
     """Round-off noise variance of a DF-I biquad cascade with one rounding per section.
     Section k's error is shaped by 1/A_k(z) (it re-enters its own recursion) and then by the
-    remaining sections; the input quantization error passes through the whole cascade."""
+    remaining sections; the input quantization error passes through the whole cascade.
+    error_feedback: section k's error is shaped by N_k(z)/A_k(z), N_k = 1 + round(a1) z^-1 + round(a2) z^-2."""
+    sos = np.asarray(sos, float)
     d2 = sig_fmt.lsb ** 2 / 12
     total = d2 * _energy([s[:3] for s in sos], [s[3:] for s in sos]) if input_quantized else 0.0
     for k in range(len(sos)):
         rest = sos[k + 1:]
-        total += d2 * _energy([s[:3] for s in rest], [sos[k, 3:]] + [s[3:] for s in rest])
+        own = [np.r_[1.0, np.floor(sos[k, 4:6] + 0.5)]] if error_feedback else []
+        total += d2 * _energy(own + [s[:3] for s in rest], [sos[k, 3:]] + [s[3:] for s in rest])
     return total

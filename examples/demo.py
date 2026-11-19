@@ -1,5 +1,5 @@
 """Design a filter with each method, plot Bode + pole-zero, and show the quantization sweep.
-Run from the filterlab folder:  python3 examples/demo.py   (writes examples/gallery.png)"""
+Run from the repo root:  python examples/demo.py   (writes examples/gallery.png)"""
 import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np, matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
 from dsp import *
@@ -10,9 +10,9 @@ h_pm = remez(37, [0, fp, fst, fs / 2], [1, 0], weight=[1 / dp, 1 / ds], fs=fs)
 n_k, beta = kaiser_params(rs, fst - fp, fs)
 h_kw = fir_window(n_k, (fp + fst) / 2, "lowpass", "kaiser", fs=fs, beta=beta)
 iir = {k: design_iir(k, "lowpass", min_order(k, "lowpass", [fp], [fst], rp, rs, fs), fp if k != "cheby2" else fst, fs=fs, rp=rp, rs=rs,
-                     butter_edge_rp=rp if k == "butter" else None) for k in ("butter", "cheby1", "cheby2")}
+                     butter_edge_rp=rp if k == "butter" else None) for k in ("butter", "cheby1", "cheby2", "ellip")}
 
-fig, ax = plt.subplots(2, 2, figsize=(12, 8)); (a_mag, a_ph), (a_pz, a_q) = ax
+fig, ax = plt.subplots(2, 3, figsize=(17, 8)); (a_mag, a_ph, a_aq), (a_pz, a_q, a_ef) = ax
 def plot(name, b, a=1.0):
     f, H = freqz(b, a, 4096, fs); a_mag.plot(f, 20 * np.log10(np.abs(H) + 1e-12), label=name)
     a_ph.plot(*group_delay(b, a, 2048, fs), label=name)
@@ -27,4 +27,20 @@ for w, s in ((6, "-"), (8, "--"), (12, "-"), (16, "-")):
     fmt, sq, g = quantize_sos(iir["cheby1"]["sos"], w); f, H = sos_freqz(sq, 4096, fs)
     a_q.plot(f, 20 * np.log10(np.abs(g * H) + 1e-12), ls=s, label=f"{w}-bit coefficients")
 a_q.set(ylim=(-100, 5), title="Chebyshev I biquads, coefficient rounding", xlabel="Hz"); a_q.legend(fontsize=8)
+# types III/IV: Hilbert transformer and differentiator amplitude (kind=..., odd and even lengths)
+for N, kind, lab in ((31, "hilbert", "Hilbert, 31 taps (III)"), (30, "hilbert", "Hilbert, 30 taps (IV)"), (30, "differentiator", "Differentiator, 30 taps (IV)")):
+    hh = remez(N, [0.05 * fs, 0.45 * fs] if kind == "hilbert" else [0, 0.4 * fs], [1], fs=fs, kind=kind)
+    f, H = freqz(hh, 1.0, 2048, fs); a_aq.plot(f, np.abs(H), label=lab)
+a_aq.plot([0, 0.4 * fs], [0, 0.4], "k:", lw=.8, label="ideal slope (desired = 1)")
+a_aq.set(title="Parks-McClellan types III and IV", xlabel="Hz", ylabel="|H|"); a_aq.legend(fontsize=8)
+# error feedback: output round-off noise spectrum of a narrow low-pass, with and without
+from scipy.signal import sosfilt   # examples may use scipy; the library does not
+de = design_iir("butter", "lowpass", 4, 0.02 * fs, fs=fs); fe, sqe, _ = quantize_sos(de["sos"], 24); sf = QFormat(0, 15)
+x = np.clip(np.random.default_rng(5).normal(0, .2, 1 << 16), -.99, .99); yref = sosfilt(sqe, quantize(x, sf))
+for ef, lab in ((False, "rounding only"), (True, "error feedback")):
+    e = (simulate_sos_fixed(sqe, x, fe, sf, error_feedback=ef) - yref)[1024:].reshape(-1, 1024)
+    P = np.mean(np.abs(np.fft.rfft(e * np.hanning(1024), axis=1)) ** 2, axis=0)
+    th = sos_noise_theory(sqe, sf, input_quantized=False, error_feedback=ef)
+    a_ef.plot(np.fft.rfftfreq(1024, 1 / fs), 10 * np.log10(P + 1e-30), label=f"{lab}: {10 * np.log10(np.var(e)):.1f} dB (theory {10 * np.log10(th):.1f})")
+a_ef.set(title="Round-off noise spectrum, order-4 low-pass at 0.02 fs", xlabel="Hz", ylabel="dB (arbitrary ref.)"); a_ef.legend(fontsize=8)
 fig.tight_layout(); out = os.path.join(os.path.dirname(__file__), "gallery.png"); fig.savefig(out, dpi=110); print("wrote", out)

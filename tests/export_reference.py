@@ -13,7 +13,9 @@ out["iir"] = []
 for kind in ("butter", "cheby1", "cheby2"):
     for bt, e in (("lowpass", [0.2]), ("highpass", [0.3]), ("bandpass", [0.15, 0.3]), ("bandstop", [0.15, 0.3])):
         d = design_iir(kind, bt, 5, e if len(e) > 1 else e[0], fs=1.0, rp=1.0, rs=40.0)
-        out["iir"].append({"kind": kind, "btype": bt, "edges": e, "order": 5, "sos": L(d["sos"]), "b": L(d["b"]), "a": L(d["a"])})
+        C = lambda r: [[float(np.real(v)), float(np.imag(v))] for v in np.atleast_1d(r)]
+        out["iir"].append({"kind": kind, "btype": bt, "edges": e, "order": 5, "sos": L(d["sos"]), "b": L(d["b"]), "a": L(d["a"]),
+                           "z": C(d["z"]), "p": C(d["p"]), "k": float(d["k"])})
 h = out["remez"][0]["h"]
 rng = np.random.default_rng(3); x = np.clip(rng.normal(0, .25, 300), -.99, .99)
 cf, sf = QFormat(0, 15), QFormat(0, 13)

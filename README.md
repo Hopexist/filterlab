@@ -42,15 +42,29 @@ Conventions: edges are in Hz (pass `fs`), `sos` rows are `[b0 b1 b2 1 a1 a2]`, Q
 
 Open `web/index.html` in a browser (no server, no network). Pick a method and response type, drag the P and S tabs on the magnitude plot to move the band edges, and the filter is redesigned live. The Quantization tab shows the response and poles before and after rounding, a word-length sweep, and measured against predicted round-off noise. "Copy Python" reproduces the current design with this library.
 
-Rebuild after editing the sources: `python3 web/build.py`.
+Rebuild after editing the sources: `npm run build` (or `python web/build.py`).
+
+To view it in VS Code's Simple Browser, run `npm run serve` and open `http://localhost:8000/`.
 
 ## Tests
 
+Needs Python 3 with numpy and scipy, Node 22 or newer, and Edge or Chrome. No npm packages.
+
 ```
-python3 -m pytest tests -q                         # 31 tests: library vs scipy, noise vs theory
-python3 tests/export_reference.py && node tests/cross_check.js   # JS port vs Python, 50+ checks, machine precision
-node tests/ui_sweep.js                             # drives the real page: 20 method x response-type designs meet spec
+npm run test:py      # pytest: library vs scipy, noise vs theory
+npm run test:js      # export_reference.py, then cross_check.js: JS port vs Python at machine precision
+npm run test:ui      # rebuild index.html, ui_sweep.js (every method x response type meets spec), ui_shots.js
+npm run test:all     # all of the above, in order; stops at the first failure
 ```
+
+**Python launcher.** `run_tests.js` uses the first of `python`, `py -3`, `python3` that can import numpy.
+On the development machine (Windows 11) that is `python` (3.12); `python3` there is the Microsoft Store stub.
+Run the scripts directly with the same launcher, e.g. `python -m pytest tests -q`.
+
+**Browser.** The UI tests drive headless Edge or Chrome over the DevTools protocol (`tests/browser.js`).
+Set `EDGE_PATH` or `CHROME_PATH` to choose one; otherwise the usual install locations are searched.
+Screenshots go to `shots/` (light and dark, 1440 and 390 px wide). Both UI scripts exit non-zero on a missed
+spec, a failed interaction check or any console error.
 
 ## Design notes and limits
 

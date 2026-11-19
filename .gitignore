@@ -5,3 +5,4 @@ __pycache__/
 shots/
 tests/ref/
 *.zip
+build/

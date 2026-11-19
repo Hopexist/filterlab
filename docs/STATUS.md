@@ -1,97 +1,85 @@
-# Status: autonomous run on `auto/2h-run`
+# Status: autonomous run on `auto/rtl-export`
 
-Run: 2026-11-19, 06:55Z to about 07:40Z, well inside the 2-hour budget. Branch `auto/2h-run`, from `b06142e`.
-Nothing was pushed and no remote was added; `main` is untouched.
+Run: 2026-11-19, 16:54Z to about 17:15Z (hard stop was 18:54Z). Branch `auto/rtl-export` from `master` at
+57b397e. Nothing was pushed and no remote was added. The previous run's status is in git history at `ce0a39d`.
 
-## Done
+**Headline: the RTL is generated, not synthesized, and NOT simulated.** No HDL simulator is installed
+(`where iverilog`, `where verilator` and `where vvp` found nothing; neither did yosys). The arithmetic is checked
+against the Python bit-true simulators by an independent evaluator of the generated text, but no simulator has
+run it. To simulate it, install **Icarus Verilog** (free; on Windows the bleyer.org installer puts
+`iverilog`/`vvp` on the PATH) and run `npm run test:rtl`. It then simulates 8 designs and requires zero mismatches.
+
+## Done (nothing cut)
 
 | Task | What landed | Commit |
 |---|---|---|
-| 0 | Windows/VS Code port: zero-dependency Edge/Chrome DevTools driver (`tests/browser.js`); `ui_sweep`/`ui_shots` ported and able to fail; `package.json` + `run_tests.js` (launcher detection, `test:py/js/ui/all`, `build`, `serve`); `cross_check` with mixed tolerance and analytic IIR zeros/poles/gain; `build.py` writes UTF-8 + LF; README commands | `5e3c9ca` |
-| B | Parks-McClellan types II-IV (`remez(..., kind=)`), elliptic IIR + `min_order`, overflow saturate/wrap, input headroom, error feedback with theory; JS drift fixed; app: elliptic method, type II in auto mode, overflow/headroom/EF controls | `2a5955a` |
-| A | Critique (ui-ux-pro-max, impeccable), then grouped collapsible controls, phone layout (bottom tab bar, 44 px targets), compare mode (pin B, dashed neutral ink), captions on the Quantization tab, DF-I signal-flow diagram with the rounding point and EF path | `b0a8b18` |
-| D | README (Python/JS mapping table, launcher, new features), `docs/theory.md` (order estimates, FIR types, exact scaling definition and its cost, noise model, error feedback), `examples/gallery.png` regenerated | `568a54c` |
-| C (stretch) | Signal tab: seeded tones or WAV upload, input/output spectra, float vs fixed point, first samples, SNR, playback (muted by default, capped); `tone_signal`/`power_spectrum_db` in Python + JS; bounds-checked `parseWav` | `fdbb0f5` |
+| 1-2 | `dsp/rtl.py`: `gen_fir_sv` (direct, transposed), `gen_sos_sv` (DF-I cascade, overflow, headroom, error feedback), `gen_testbench_sv`, `rtl_stimulus`, `rtl_expected_fir/sos`, `vectors_hex`, `acc_width_*`. `tests/rtl_eval.py`: independent executor of the generated SV. `tests/test_rtl.py`; `tests/rtl_sim.py` + `npm run test:rtl` (runs iverilog when present) | `15e049d` |
+| 3 | `web/rtl.js`, byte-identical text; `cross_check` compares 8 designs + testbench + vectors | `8658fde` |
+| 4 | Hardware export card on the Quantization tab: structure choice, copy, download module, download testbench and vectors, assumptions, honest label. Also fixed a 110 px sideways scroll on the IIR Quantization tab (from the last run) and added a 1440 px no-overflow check for every tab | `d5be1a1` |
+| 5 | `docs/rtl.md` (API, interface, latency, simulator-to-RTL arithmetic table, width derivation, verification, how to simulate), README section, `examples/rtl_export.py` | `4d8725b` |
+| 6 (stretch) | Cost report: `csd`, `rtl_cost_fir`, `rtl_cost_sos` (Python + JS, cross-checked), shown in the export card. Counts only, no area or Fmax | `5c11bee` |
 
-Each task has its plan in `docs/superpowers/plans/` (committed separately), and every decision is in
-`docs/DECISIONS.md`. Nothing was cut. The order was 0, B, A, D, C, as the brief asked.
-
-## Final test results (all run on the final commit)
+## Final test results (final commit)
 
 | Command | Result |
 |---|---|
-| `npm run test:py` (`python -m pytest tests -q`) | pass, 69 tests (31 baseline + 34 task B + 4 task C) |
-| `npm run test:js` (`python tests/export_reference.py`, then `node tests/cross_check.js`) | pass, 181 checks (56 at baseline) |
-| `node tests/ui_sweep.js` (inside `npm run test:ui`) | pass: 24/24 designs meet spec; direct-form banner; edge drag; error feedback in the app (-53.8 to -100.6 dB, agrees with theory); DF-I diagram; compare mode; phone layout (fixed bottom tab bar, no sideways scroll, no target under 44 px); Signal tab SNR 88 dB; WAV upload; clear error for a non-WAV file; no console errors |
-| `node tests/ui_shots.js` | pass: 24 screenshots (4 tabs x light/dark x 1440/390, plus 390 viewport shots), no console errors |
-| `npm run test:all` | pass (runs all of the above in order) |
+| `npm run test:py` | pass, 91 tests (69 before + 22 RTL) |
+| `npm run test:js` (export_reference, then cross_check) | pass, 200 checks (181 before + 8 RTL text + testbench + vectors + 8 cost + CSD) |
+| `npm run test:rtl` | pass: 22 pytest RTL tests. **Simulation step skipped: iverilog not installed (printed as "NOT simulated")** |
+| `node tests/ui_sweep.js` | pass: 24/24 designs, all earlier checks, plus no sideways scroll on any tab (FIR and IIR) at 1440 px, and the export card for FIR and IIR with the honest label and complete text |
+| `node tests/ui_shots.js` | pass, 24 screenshots, no console errors; the export card was also looked at in light and dark at 1440 and 390 px |
 
-Checks that the tests can fail: `ui_sweep` exits 1 for a bad `EDGE_PATH`, and the driver records injected
-console and page errors. The error-feedback theory test fails when the sign is flipped (mutation-checked
-by hand).
+What the RTL tests prove, and how:
+- **Bit-exactness against `simulate_*_fixed`.** The independent evaluator runs the generated text on impulse,
+  full-scale step, full-scale square and seeded random input. The cases cover:
+  - FIR direct and transposed, saturate and wrap;
+  - SOS with headroom 0, 1 and 2, with and without error feedback;
+  - an unscaled resonant cascade that really saturates and wraps;
+  - coefficients with no fraction bits;
+  - the browser's path (JS text with JS-simulated vectors).
+- **The comparison can fail.** A mutation test changes one coefficient by one LSB and requires a mismatch.
+- **Structure.** Ports, widths, accumulator width = the stated bound, and every constant against
+  `h_int`/`sos_int`.
+- **Python and JS agree.** Byte-identical module, testbench and vectors text for 8 designs, including
+  elliptic band-pass cascades.
 
-## Needs your review
+## Needs owner approval
 
-- **Signature changes:** only the five approved ones were made. New public functions were added (allowed, not
-  signature changes): `tone_signal`, `power_spectrum_db` (Python); `toneSignal`, `powerSpectrumDb`,
-  `parseWav` (JS). Nothing is under "Needs owner approval" in DECISIONS.md.
-- **JS default changed:** `firNoiseTheory`/`sosNoiseTheory` now default `inputQuantized = true`, matching
-  Python (the approved drift fix); the app passes `false` explicitly, so the UI numbers are unchanged.
-- **CLAUDE.md:** one stale line updated (Remez "type I only"). Please check you are happy with that.
-- **App behaviour change:** in auto mode the equiripple low-pass/band-pass may now use an even length (one tap
-  fewer, type II) when the measured response still meets spec. The default design is now 36 taps, not 37.
-- **Hilbert and differentiator** are library + JS only; the app has no UI for them (DECISIONS.md says why).
-- **Browser tests need to run outside the agent sandbox** (the sandbox blocks spawning Edge). They run
-  normally from a VS Code terminal.
+None. Only new functions were added (`dsp/rtl.py`, `web/rtl.js`); no existing signature changed.
 
-## Independent review
+## Decisions to review (all in docs/DECISIONS.md)
 
-An agent-skills code-reviewer pass over the branch diff approved the DSP. It reproduced 69 pytest and
-181 cross-checks, and its own extra Python/JS/scipy checks (remez types II-IV at N = 16-64, elliptic orders 1-10)
-agreed to 5e-13 or better. It found four robustness issues in the test driver and app, all fixed and
-re-verified before the final commit:
-- the port wait could spin without sleeping;
-- a dropped DevTools socket could hang a test forever;
-- a failed launch could leak the browser and its temp profile;
-- the Signal tab could show a stale result for a second WAV with the same name and length.
-
-A fifth item, a type II band edge just below fs/2, is left as is, because scipy behaves the same way. See
-DECISIONS.md.
-
-Two `filterlab-cdp-*` profile folders remain in `%TEMP%`, left by the first sandboxed launch attempts
-(before the cleanup fix). They are outside the repo, so they were not deleted.
+- **Interface:** one sample per clock, registered output (latency 1), synchronous active-high reset, **no
+  pipelining**. The whole multiply-add chain must fit in one clock period.
+- **Headroom happens inside the module:** `(x + 2^(h-1)) >>> h`. It equals the simulator for on-grid inputs. The
+  leftover cascade gain stays outside the module, as in the simulator.
+- **`sos_int` rows are `[b0, b1, b2, a1, a2]`**, the C-export layout.
+- **The export is a card on the Quantization tab, not a new tab.** It uses that tab's settings directly.
+- **The browser's testbench stimulus uses the JS generator** (not numpy's). Expected outputs come from the JS
+  simulator, and pytest covers that path.
+- **The cost report counts the generated structure:** no symmetric-tap folding, no sub-expression sharing.
 
 ## Known limits
 
-- Per-section peak scaling can leave a large output gain (111, or 41 dB, for the README's order-8
-  Chebyshev I), which multiplies the round-off noise at the output. This is documented in `docs/theory.md`;
-  the scaling itself was not changed.
-- The JS noise theory integrates on a 2^14 grid (Python: 2^15), so `sos_noise_theory` cross-checks at 1e-3
-  relative, not machine precision.
-- Elliptic `min_order` for band-stop uses the same selectivity formula as the other kinds. scipy's
-  band-stop order functions also optimise the passband edges, so band-stop orders can differ from
-  `ellipord`. Only lowpass, highpass and bandpass are tested against scipy.
-- The Signal tab simulates up to 10 s of audio in the main thread; long FIR designs on 48 kHz files take a
-  noticeable fraction of a second (not measured).
-- The Signal tab charts show at most 140 dB of range; a quieter floor is clipped at the bottom.
+- **No pipelining.** Long FIRs and deep cascades will limit the clock rate. How much is unknown without synthesis.
+- **Unscaled bound, not typical.** The accumulator width is the worst case for any input, so it is safe rather than
+  minimal for typical signals.
+- **IIR export always uses the biquad cascade**, even if the Quantization tab's Structure is "single direct form"
+  (the card says so). Unstable quantized cascades are not exported.
+- **Fixed module names:** `filterlab_fir` / `filterlab_sos` in the app. The Python API takes any valid identifier.
 
 ## Not verified
 
-- **Audio playback** was not heard. Headless Edge has no audio output. The code path (muted start, gain cap,
-  clipping, stop on tab change) is implemented, but no test exercises it.
-- **Real phones and touch input.** The 390 px layout was checked in headless Edge with a desktop pointer, not
-  on a touch device. Drag handles have 44 px hit areas, but touch dragging was not tested.
-- **macOS and Linux:** the browser lookup paths for those systems are written but were not run there.
-- **`npm run serve`** was smoke-tested only through `node run_tests.js serve` with `PORT=8765` (HTTP 200,
-  full page), not inside VS Code's Simple Browser.
-- **Screen readers:** the ARIA roles and labels were reviewed in code, not with a screen reader.
-- **The impeccable critique ran without a PRODUCT.md** (no questions allowed), using CLAUDE.md as product
-  context.
+- **Any HDL simulator or synthesis tool** accepting the generated text. The subset is deliberately plain
+  (`logic`, `always_ff`, `assign`, `>>>`, sized signed literals) but is unconfirmed. The same goes for the
+  testbench (`$readmemh`, `$signed`, `#1` after the clock edge).
+- **The browser downloads** (Blob + `a[download]` from `file://`): the code path was not clicked through in a
+  real browser. The text is checked through `#rtlText`, which uses the same strings.
+- **Phone layout** was checked in headless Edge at 390 px, not on a touch device.
 
 ## Plugins used
 
-superpowers (writing-plans; TDD with failing tests first; verification before each commit), ui-ux-pro-max
-(UX guideline searches for the critique), impeccable (critique context and the design detector: no findings),
-diagram-design (connector, label and accessibility rules for the DF-I diagram), agent-skills (independent
-code review of the branch), claude-security-style pass done in-thread over HTML sinks, exported-code
-strings and clipboard handling (no issues found; the claude-security orchestrator was not launched).
+superpowers (plans, failing tests first, verification before each commit). impeccable's design hook scanned
+the CSS edits and found nothing. ui-ux-pro-max, diagram-design, ecc, agent-skills and claude-security were not
+used this run. No new HTML sinks take user text: module names are fixed and the generated text is inserted with
+`textContent`.

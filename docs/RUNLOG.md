@@ -15,3 +15,4 @@
 - Start: 2026-11-19T16:54:37Z. Hard stop: 18:54:37Z. Branch `auto/rtl-export` from master 57b397e.
 - Simulators: `where iverilog`, `where verilator`, `where vvp` found nothing (yosys neither). RTL is verified
   structurally and by an independent text evaluator only; it is "not simulated".
+- 17:15Z all six tasks done; full gate green (91 pytest, 200 cross-checks, test:rtl evaluator pass + simulation skipped, UI pass); STATUS.md written. Run ends.

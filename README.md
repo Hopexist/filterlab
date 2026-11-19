@@ -72,10 +72,13 @@ snake_case and JavaScript names are camelCase; keyword-only Python options becom
 | `simulate_sos_fixed(sos, x, coef_fmt, sig_fmt, *, overflow, headroom_bits, error_feedback)` | `sosFixedSim(sos, x, coefFmt, sigFmt, rounding, {overflow, headroomBits, errorFeedback})` | JS also returns the float references `yq`, `yIdeal` |
 | `fir_noise_theory(h, sig_fmt, input_quantized=True)` | `firNoiseTheory(h, sigFmt, inputQuantized = true)` | |
 | `sos_noise_theory(sos, sig_fmt, input_quantized=True, *, error_feedback)` | `sosNoiseTheory(sos, sigFmt, inputQuantized = true, {errorFeedback})` | |
+| `tone_signal(n, fs, tones, noise_rms, seed)` | `toneSignal(n, fs, tones, noiseRms, seed)` | same seeded generator (mulberry32), bit-identical |
+| `power_spectrum_db(x, fs, nfft)` | `powerSpectrumDb(x, fs, nfft)` | Welch, Hann, 50 % overlap; full-scale sine = 0 dB |
+| (none) | `parseWav(arrayBuffer)` | browser upload only: PCM 16/24-bit or float32, mono/stereo, at most 10 s |
 
 ## Interactive app
 
-Open `web/index.html` in a browser (no server, no network). Pick a method and response type, drag the P and S tabs on the magnitude plot to move the band edges, and the filter is redesigned live. "Pin as B" keeps the current magnitude response on the plot (dashed) so you can compare the next design against it. The Quantization tab shows the response and poles before and after rounding, a word-length sweep, measured against predicted round-off noise, and, for IIR filters, a diagram of one biquad with its rounding point. It also has controls for overflow (saturate or wrap), input headroom and error feedback. "Copy Python" reproduces the current design with this library. On a phone the views are on a tab bar at the bottom.
+Open `web/index.html` in a browser (no server, no network). Pick a method and response type, drag the P and S tabs on the magnitude plot to move the band edges, and the filter is redesigned live. "Pin as B" keeps the current magnitude response on the plot (dashed) so you can compare the next design against it. The Quantization tab shows the response and poles before and after rounding, a word-length sweep, measured against predicted round-off noise, and, for IIR filters, a diagram of one biquad with its rounding point. It also has controls for overflow (saturate or wrap), input headroom and error feedback. "Copy Python" reproduces the current design with this library. The Signal tab runs a seeded test signal (three tones plus noise) or a WAV file you upload through the current design, in floating point and bit-true fixed point. It shows the input and output spectra and the first samples, and can play each one (playback starts muted and is capped at half scale). On a phone the views are on a tab bar at the bottom.
 
 Rebuild after editing the sources: `npm run build` (or `python web/build.py`).
 

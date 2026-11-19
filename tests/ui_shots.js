@@ -12,7 +12,7 @@ const SHOTS = path.resolve(__dirname, '..', 'shots');
       for (const scheme of ['light', 'dark']) {
         await p.setViewport(w, h); await p.setScheme(scheme);
         await p.goto(fileUrl('web/index.html')); await p.wait(800);
-        for (const tab of ['response', 'time', 'quant']) {
+        for (const tab of ['response', 'time', 'quant', 'signal']) {
           await p.click(`[data-tab=${tab}]`); await p.wait(400);
           await p.screenshot(path.join(SHOTS, `${scheme}-${w}-${tab}.png`)); n++;
           // phone: also what the first screen really looks like (a full-page capture draws the fixed tab bar mid-page)

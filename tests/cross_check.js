@@ -72,4 +72,40 @@ close('toInt wrap', [1.5, -1.25, 0.99, 3.2].map(v => D.toInt(v, D.qFormat(0, 7),
 close('sos noise theory, input quantized', D.sosNoiseTheory(q.sos, s2), b.th_sos_inq, { rtol: 1e-3, atol: 0 });
 close('sos noise theory, error feedback', D.sosNoiseTheory(b.sqe, s2, false, { errorFeedback: true }), b.th_sos_ef, { rtol: 1e-3, atol: 0 });
 close('fir noise theory, input quantized', D.firNoiseTheory(q.fir_h, D.qFormat(0, 13)), b.th_fir_inq);
+// ---- task C: test signal, spectrum (vs Python) and the WAV parser (JS only: synthesized files) ----
+const sp = ref.spectrum;
+close('tone signal (seeded noise)', D.toneSignal(5000, 8000, [[440, 0.5], [1800, 0.25]], 0.01, 11), sp.x);
+close('tone signal, odd length', D.toneSignal(301, 1000, [[50, 1.0]], 0.1, 3), sp.x_short);
+const ps = D.powerSpectrumDb(Float64Array.from(sp.x), 8000, 1024); close('power spectrum f', ps.f, sp.f); close('power spectrum dB', ps.db, sp.db);
+function wav({ code = 1, bits = 16, ch = 1, fs = 8000, frames = 100, extra = '', badAlign = false, write }) {
+  const bps = bits / 8, align = ch * bps, dataBytes = frames * align, junk = extra.length, buf = new ArrayBuffer(12 + 8 + junk + (junk & 1) + 24 + 8 + dataBytes), dv = new DataView(buf);
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) dv.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); dv.setUint32(4, buf.byteLength - 8, true); str(8, 'WAVE'); let o = 12;
+  if (junk) { str(o, 'LIST'); dv.setUint32(o + 4, junk, true); str(o + 8, extra); o += 8 + junk + (junk & 1); }
+  str(o, 'fmt '); dv.setUint32(o + 4, 16, true); dv.setUint16(o + 8, code, true); dv.setUint16(o + 10, ch, true); dv.setUint32(o + 12, fs, true);
+  dv.setUint32(o + 16, fs * align, true); dv.setUint16(o + 20, badAlign ? align + 1 : align, true); dv.setUint16(o + 22, bits, true); o += 24;
+  str(o, 'data'); dv.setUint32(o + 4, dataBytes, true); o += 8;
+  for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) write(dv, o + i * align + c * bps, i, c);
+  return buf;
+}
+const sine = i => 0.5 * Math.sin(2 * PI * i / 20), PI = Math.PI;
+const w16 = D.parseWav(wav({ ch: 2, frames: 200, extra: 'odd', write: (dv, o, i, c) => dv.setInt16(o, Math.round(sine(i) * (c ? 0 : 32767)), true) }));
+close('wav PCM16 stereo -> mono (+ odd LIST chunk)', Array.from(w16.x.slice(0, 40)), Array.from({ length: 40 }, (_, i) => Math.round(sine(i) * 32767) / 32768 / 2), { rtol: 0, atol: 1e-12 });
+const w24 = D.parseWav(wav({ bits: 24, frames: 50, write: (dv, o, i) => { const v = Math.round(sine(i) * 8388607) & 0xFFFFFF; dv.setUint8(o, v & 255); dv.setUint8(o + 1, v >> 8 & 255); dv.setUint8(o + 2, v >> 16 & 255); } }));
+close('wav PCM24 (negative samples)', Array.from(w24.x), Array.from({ length: 50 }, (_, i) => Math.round(sine(i) * 8388607) / 8388608), { rtol: 0, atol: 1e-12 });
+const w32 = D.parseWav(wav({ code: 3, bits: 32, fs: 48000, frames: 30, write: (dv, o, i) => dv.setFloat32(o, sine(i), true) }));
+close('wav float32 + rate', [...Array.from(w32.x), w32.fs], [...Array.from({ length: 30 }, (_, i) => Math.fround(sine(i))), 48000], { rtol: 0, atol: 1e-12 });
+const rejects = [
+  ['not RIFF', new TextEncoder().encode('hello world, not a wav file').buffer, /not a WAV/],
+  ['8-bit', wav({ bits: 8, write: () => {} }), /Unsupported/],
+  ['A-law', wav({ code: 6, bits: 8, write: () => {} }), /Unsupported/],
+  ['3 channels', wav({ ch: 3, write: () => {} }), /mono or stereo/],
+  ['too long', wav({ fs: 1000, frames: 10001, write: () => {} }), /limit is 10 s/],
+  ['bad block size', wav({ badAlign: true, write: () => {} }), /inconsistent/],
+  ['rate 0', wav({ fs: 0, write: () => {} }), /out of range/],
+  ['NaN sample', wav({ code: 3, bits: 32, frames: 3, write: (dv, o) => dv.setFloat32(o, NaN, true) }), /invalid/],
+  ['header only', wav({ frames: 0, write: () => {} }), /no samples/],
+  ['truncated fmt', wav({ write: () => {} }).slice(0, 30), /damaged|truncated|no format/],
+];
+for (const [name, buf, re] of rejects) { let msg = ''; try { D.parseWav(buf); } catch (e) { msg = e.message; } close(`wav rejects: ${name}`, re.test(msg) ? 0 : 1, 0, EXACT); if (!re.test(msg)) console.log('   got:', msg || '(no error)'); }
 console.log(fails ? `\n${fails} of ${count} FAILED` : `\nall ${count} cross-checks passed`); process.exit(fails ? 1 : 0);

@@ -54,5 +54,8 @@ out["quant_b"] = {"xe": L(xe), "sqe": L(sqe), "fe": [fe.int_bits, fe.frac_bits],
                   "th_sos_inq": sos_noise_theory(d["sos"], sf2, input_quantized=True),
                   "th_sos_ef": sos_noise_theory(sqe, sf2, input_quantized=False, error_feedback=True),
                   "th_fir_inq": fir_noise_theory(np.array(h), sf, input_quantized=True)}
+xc = tone_signal(5000, 8000.0, ((440, 0.5), (1800, 0.25)), noise_rms=0.01, seed=11)
+fc, dbc = power_spectrum_db(xc, 8000.0, 1024)
+out["spectrum"] = {"x": L(xc), "f": L(fc), "db": L(dbc), "x_short": L(tone_signal(301, 1000.0, ((50, 1.0),), noise_rms=0.1, seed=3))}
 json.dump(out, open(os.path.join(os.path.dirname(__file__), "reference.json"), "w"))
 print("wrote reference.json")

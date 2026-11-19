@@ -515,7 +515,89 @@ function sosNoiseTheory(sos, sigFmt, inputQuantized = true, { errorFeedback = fa
   return total;
 }
 
-root.DSP = { windowFn, kaiserParams, firWindow, remez, designIIR, minOrder, zpk2sos, sos2tf, polyRoots, freqz, sosFreqz, groupDelay, sosGroupDelay, measure,
+/* ---------------- test signals, spectra, WAV (python: dsp/spectrum.py; parseWav is browser I/O, JS only) ---------------- */
+function toneSignal(n, fs, tones = [], noiseRms = 0, seed = 7) {
+  const x = new Float64Array(n);
+  for (const [f, amp] of tones) for (let k = 0; k < n; k++) x[k] += amp * Math.sin(2 * PI * f * k / fs);
+  if (noiseRms > 0) {
+    const r = mulberry32(seed);
+    for (let i = 0; i < n; i += 2) { const u = Math.max(r(), 1e-12), v = r(), m = Math.sqrt(-2 * Math.log(u)) * noiseRms; x[i] += m * Math.cos(2 * PI * v); if (i + 1 < n) x[i + 1] += m * Math.sin(2 * PI * v); }
+  }
+  return x;
+}
+function fftInPlace(re, im) { // iterative radix-2, length a power of two
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * PI / len, half = len >> 1;
+    for (let k = 0; k < half; k++) {
+      const wr = Math.cos(ang * k), wi = Math.sin(ang * k);
+      for (let i = k; i < n; i += len) { const j = i + half, tr = re[j] * wr - im[j] * wi, ti = re[j] * wi + im[j] * wr; re[j] = re[i] - tr; im[j] = im[i] - ti; re[i] += tr; im[i] += ti; }
+    }
+  }
+}
+/** Welch averaged periodogram, periodic Hann, 50 % overlap; a full-scale sine on a bin reads 0 dB. */
+function powerSpectrumDb(x, fs, nfft = 4096) {
+  if (nfft < 2 || (nfft & (nfft - 1))) throw new Error('nfft must be a power of two');
+  let xs = x; if (xs.length < nfft) { xs = new Float64Array(nfft); xs.set(x); }
+  const w = Float64Array.from({ length: nfft }, (_, i) => 0.5 - 0.5 * Math.cos(2 * PI * i / nfft)), hop = nfft / 2, nb = nfft / 2 + 1;
+  let sw = 0; for (const v of w) sw += v;
+  const P = new Float64Array(nb); let segs = 0;
+  for (let s0 = 0; s0 + nfft <= xs.length; s0 += hop) {
+    const re = new Float64Array(nfft), im = new Float64Array(nfft);
+    for (let i = 0; i < nfft; i++) re[i] = xs[s0 + i] * w[i];
+    fftInPlace(re, im); for (let k = 0; k < nb; k++) P[k] += re[k] * re[k] + im[k] * im[k]; segs++;
+  }
+  const f = Float64Array.from({ length: nb }, (_, k) => k * fs / nfft), db = P.map(v => 10 * Math.log10(4 * v / segs / (sw * sw) + 1e-30));
+  return { f, db };
+}
+/** Read a WAV file: PCM 16/24-bit or float 32-bit, mono or stereo (mixed to mono), at most 10 s.
+ *  Every header field is checked; anything else throws an Error whose message says what is wrong. */
+function parseWav(buf, maxSeconds = 10) {
+  const dv = new DataView(buf), len = buf.byteLength, tag = o => String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+  if (len < 12 || tag(0) !== 'RIFF' || tag(8) !== 'WAVE') throw new Error('This is not a WAV file: it has no RIFF/WAVE header.');
+  let fmt = null, data = null;
+  for (let o = 12; o + 8 <= len;) {
+    const id = tag(o), size = dv.getUint32(o + 4, true), body = o + 8;
+    if (id === 'fmt ') {
+      if (size < 16 || body + size > len) throw new Error('The WAV format chunk is damaged or truncated.');
+      let code = dv.getUint16(body, true);
+      if (code === 0xFFFE && size >= 26) code = dv.getUint16(body + 24, true); // WAVE_FORMAT_EXTENSIBLE: sub-format GUID starts with the code
+      fmt = { code, channels: dv.getUint16(body + 2, true), fs: dv.getUint32(body + 4, true), align: dv.getUint16(body + 12, true), bits: dv.getUint16(body + 14, true) };
+    } else if (id === 'data') {
+      data = { start: body, bytes: Math.min(size, len - body) }; // streamed files may overstate the size: read what is there
+      if (fmt) break;
+    }
+    o = body + size + (size & 1); // chunks are padded to an even length
+  }
+  if (!fmt) throw new Error('The WAV file has no format chunk.');
+  if (!data) throw new Error('The WAV file has no audio data chunk.');
+  const { code, channels, fs, align, bits } = fmt;
+  const kind = code === 1 && bits === 16 ? 'PCM 16-bit' : code === 1 && bits === 24 ? 'PCM 24-bit' : code === 3 && bits === 32 ? 'float 32-bit' : null;
+  if (!kind) throw new Error(`Unsupported WAV encoding (format ${code}, ${bits}-bit). Use 16- or 24-bit PCM or 32-bit float.`);
+  if (channels !== 1 && channels !== 2) throw new Error(`Only mono or stereo files are supported; this one has ${channels} channels.`);
+  if (fs < 1000 || fs > 384000) throw new Error(`The sample rate ${fs} Hz is out of range (1 kHz to 384 kHz).`);
+  if (align !== channels * bits / 8) throw new Error('The WAV header is inconsistent (block size does not match channels and bit depth).');
+  const frames = Math.floor(data.bytes / align), seconds = frames / fs;
+  if (frames === 0) throw new Error('The WAV file contains no samples.');
+  if (seconds > maxSeconds) throw new Error(`The file is ${seconds.toFixed(1)} s long; the limit is ${maxSeconds} s. Trim it and try again.`);
+  const x = new Float64Array(frames), bps = bits / 8;
+  for (let i = 0; i < frames; i++) {
+    let acc = 0;
+    for (let c = 0; c < channels; c++) {
+      const o = data.start + i * align + c * bps; let v;
+      if (bits === 16) v = dv.getInt16(o, true) / 32768;
+      else if (bits === 24) { const u = dv.getUint8(o) | dv.getUint8(o + 1) << 8 | dv.getUint8(o + 2) << 16; v = (u & 0x800000 ? u - 0x1000000 : u) / 8388608; }
+      else v = dv.getFloat32(o, true);
+      if (!Number.isFinite(v)) throw new Error('The WAV file contains invalid (NaN or infinite) samples.');
+      acc += v;
+    }
+    x[i] = acc / channels;
+  }
+  return { fs, x, channels, seconds, format: kind };
+}
+
+root.DSP = { toneSignal, powerSpectrumDb, parseWav, windowFn, kaiserParams, firWindow, remez, designIIR, minOrder, zpk2sos, sos2tf, polyRoots, freqz, sosFreqz, groupDelay, sosGroupDelay, measure,
   qFormat, autoFormat, quantize, toInt, quantizeFir, scaleSos, quantizeSos, quantizeDirect, testSignal, firFixedSim, sosFixedSim, variance, power, firNoiseTheory, sosNoiseTheory, cabs, cx };
 if (typeof module !== 'undefined') module.exports = root.DSP;
 })(typeof window !== 'undefined' ? window : globalThis);

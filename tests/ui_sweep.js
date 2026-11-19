@@ -86,6 +86,27 @@ const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
     if (phone.overflow > 0) problems.push(`phone layout scrolls sideways by ${phone.overflow} px`);
     if (phone.small) problems.push(`${phone.small} tab, segment or group controls are under 44 px tall on a phone`);
     await p.setViewport(1440, 1000);
+
+    // Signal tab: test tones render with a finite fixed-point SNR; a WAV loads through the file input; a bad file says why
+    await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'remez', btype: 'lowpass', fs: 8000, edges: [1000, 1500], rp: 1, rs: 60, orderMode: 'auto' }); Object.assign(s.q, { coef: 16, sig: 16, ef: false, headroom: 0, overflow: 'saturate' }); });
+    await p.click('[data-tab=signal]'); await p.wait(600);
+    const snr = await p.evaluate(() => { const b = [...document.querySelectorAll('.caption b')].find(x => /dB/.test(x.textContent)); return b ? parseFloat(b.textContent) : NaN; });
+    console.log('signal tab, test tones: fixed vs float SNR', snr, 'dB');
+    if (!(snr > 40)) problems.push(`signal tab SNR missing or implausible (${snr})`);
+    await p.screenshot(path.join(SHOTS, 'signal-tones.png'));
+    const load = (bytes, name) => p.evaluate((b, n) => { const inp = document.getElementById('wavIn'), dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(b)], n, { type: 'audio/wav' })); inp.files = dt.files; inp.dispatchEvent(new Event('change')); }, bytes, name);
+    const mkWav = (fs, frames) => { const b = Buffer.alloc(44 + frames * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + frames * 2, 4); b.write('WAVE', 8); b.write('fmt ', 12); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(fs, 24); b.writeUInt32LE(fs * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(frames * 2, 40); for (let i = 0; i < frames; i++) b.writeInt16LE(Math.round(12000 * Math.sin(2 * Math.PI * 440 * i / fs) + 6000 * Math.sin(2 * Math.PI * 5000 * i / fs)), 44 + 2 * i); return Array.from(b); };
+    await load(mkWav(16000, 16000), 'tone.wav'); await p.wait(800);
+    const w = await p.evaluate(() => ({ fs: window.__filterlab.state.fs, info: document.getElementById('srcInfo').textContent, err: document.querySelector('[role=alert]')?.textContent || '' }));
+    console.log('WAV upload:', JSON.stringify(w));
+    if (w.fs !== 16000 || !/PCM 16-bit/.test(w.info) || w.err) problems.push('a valid 16-bit WAV did not load through the file input');
+    await p.screenshot(path.join(SHOTS, 'signal-wav.png'));
+    await load(Array.from(Buffer.from('definitely not a wav file')), 'notes.txt'); await p.wait(400);
+    const bad = await p.evaluate(() => document.querySelector('[role=alert]')?.textContent || '');
+    console.log('bad file message:', bad);
+    if (!/Could not read notes\.txt\. This is not a WAV file/.test(bad)) problems.push('a non-WAV file did not produce a clear error');
+    await p.evaluate(() => { window.__filterlab.sig.source = 'tones'; window.__filterlab.sig.error = ''; window.__filterlab.state.fs = 8000; window.__filterlab.state.edges = [1000, 1500]; });
+    await p.click('[data-tab=response]');
   } catch (e) {
     problems.push('script error: ' + e.message);
   } finally {

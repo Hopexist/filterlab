@@ -172,3 +172,13 @@ table.t th { color: var(--ink-3); font-weight: 500; }
   .drag-hint { display: none; }
   .toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
 }
+
+/* signal tab */
+.sigctl { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px 28px; align-items: start; }
+.sigctl .seg { margin-bottom: 10px; }
+.sigctl .file { display: inline-flex; align-items: center; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.file:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tools.play { flex-wrap: wrap; margin-top: 12px; gap: 8px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 860px) { .sigctl { grid-template-columns: minmax(0, 1fr); } }

@@ -33,7 +33,9 @@ const state = {
   orderMode: 'auto', order: 41, tab: 'response', zoom: 'full', phase: 'phase',
   q: { coef: 12, sig: 16, round: 'nearest', struct: 'sos', overflow: 'saturate', headroom: 0, ef: false },
 };
-let pinB = null;   // compare mode: a snapshot of the magnitude response of a pinned design
+let pinB = null;
+const sig = { source: 'tones', wav: null, name: '', error: '', vol: 0 };   // Signal tab: source, loaded WAV, volume (starts muted)
+let audio = { ctx: null, src: null }, sigMemo = { key: '', out: null };   // compare mode: a snapshot of the magnitude response of a pinned design
 let drawn = false, current = null, focusKey = null, renderQueued = false, fastMode = false;
 
 /* ================= spec helpers ================= */
@@ -390,6 +392,92 @@ function dfDiagram(ef) {
   ${ef ? `${lab(283, 4, 'ERROR FEEDBACK', 104)}` : ''}
   </g></svg></div>`;
 }
+/* ---------- signal (time-domain demo) ---------- */
+function stopAudio() { if (audio.src) { try { audio.src.stop(); } catch (e) { /* already stopped */ } audio.src = null; } }
+function play(y, fs) {
+  stopAudio();
+  if (!(sig.vol > 0)) { toast('Volume is at zero. Raise it to hear the signal.'); return; }
+  try {
+    audio.ctx = audio.ctx || new (window.AudioContext || window.webkitAudioContext)();
+    const b = audio.ctx.createBuffer(1, y.length, fs), ch = b.getChannelData(0);
+    for (let i = 0; i < y.length; i++) ch[i] = clamp(y[i], -1, 1);
+    const src = audio.ctx.createBufferSource(), g = audio.ctx.createGain();
+    g.gain.value = clamp(sig.vol / 100, 0, 1) * 0.5;   // never louder than half scale
+    src.buffer = b; src.connect(g).connect(audio.ctx.destination); src.onended = () => { if (audio.src === src) audio.src = null; };
+    src.start(); audio.src = src;
+  } catch (e) { toast(`Playback failed: ${e.message}`); }
+}
+function signalRun(d, st) {
+  const q = st.q, wav = sig.source === 'wav' && sig.wav;
+  const key = JSON.stringify([d.title, d.size, st.fs, st.edges, st.rp, st.rs, q, sig.source, sig.name, wav ? wav.x.length : 0]);
+  if (sigMemo.key === key) return sigMemo.out;
+  const fs = st.fs, x = wav ? wav.x : D.toneSignal(16384, fs, [[0.03 * fs, 0.25], [0.11 * fs, 0.25], [0.3 * fs, 0.25]], 0.02, 7);
+  const sigFmt = D.qFormat(0, q.sig - 1), out = { x, fs, notes: [] };
+  if (d.kind === 'fir') {
+    const qf = D.quantizeFir(d.h, q.coef, q.round), sim = D.firFixedSim(d.h, x, qf.fmt, sigFmt, q.round, { overflow: q.overflow });
+    out.yF = sim.yIdeal; out.yQ = sim.y;
+  } else {
+    const qs = D.quantizeSos(d.sos, q.coef, q.round);
+    if (q.struct === 'direct') out.notes.push('The fixed-point output uses the biquad cascade (direct form is only analysed for coefficient sensitivity).');
+    if (!qs.sq.every(s => D.polyRoots(s.slice(3)).every(p => D.cabs(p) < 1))) { out.notes.push(`At ${q.coef} bits a biquad pole leaves the unit circle, so there is no fixed-point output. Use more bits.`); }
+    const sim = D.sosFixedSim(qs.scaled, x, qs.fmt, sigFmt, q.round, { overflow: q.overflow, headroomBits: q.headroom, errorFeedback: q.ef }), g = qs.gain * Math.pow(2, q.headroom);
+    out.yF = sim.yIdeal.map(v => v * g); out.yQ = out.notes.length && /no fixed-point/.test(out.notes.join()) ? null : sim.y.map(v => v * g);
+  }
+  const skip = Math.min(1000, Math.floor(x.length / 10));
+  out.snr = out.yQ ? 10 * Math.log10(D.power(out.yF, skip) / D.variance(out.yQ, out.yF, skip)) : NaN;
+  const nfft = x.length >= 8192 ? 4096 : 1024;
+  out.sx = D.powerSpectrumDb(x, fs, nfft); out.sF = D.powerSpectrumDb(out.yF, fs, nfft); out.sQ = out.yQ ? D.powerSpectrumDb(out.yQ, fs, nfft) : null;
+  sigMemo = { key, out }; return out;
+}
+function renderSignal(d) {
+  const st = state, v = $('#view'), r = signalRun(d, st), fs = st.fs, nyq = fs / 2;
+  const wav = sig.source === 'wav' && sig.wav, srcTxt = wav ? `${esc(sig.name)}: ${sig.wav.format}, ${sig.wav.channels === 2 ? 'stereo mixed to mono' : 'mono'}, ${fmtN(sig.wav.seconds, 2)} s at ${sig.wav.fs} Hz.`
+    : `Three tones at ${fmtN(0.03 * fs, 0)}, ${fmtN(0.11 * fs, 0)} and ${fmtN(0.3 * fs, 0)} Hz (amplitude 0.25 each) plus white noise (rms 0.02), ${fmtN(16384 / fs, 2)} s.`;
+  const segBtn = (k, l) => `<button data-src="${k}" aria-pressed="${sig.source === k}">${l}</button>`;
+  v.innerHTML = `<div class="panel card"><div class="sigctl">
+      <div><div class="seg" role="group" aria-label="Signal source">${segBtn('tones', 'Test tones')}${segBtn('wav', 'WAV file')}</div>
+        <label class="file btn">Choose a WAV file<input type="file" id="wavIn" accept=".wav,audio/wav,audio/x-wav" class="vh"></label>
+        <p class="hint" id="srcInfo">${sig.source === 'wav' && !sig.wav ? 'No file loaded yet. PCM 16- or 24-bit, or 32-bit float; mono or stereo; up to 10 s.' : srcTxt}</p>
+        ${sig.error ? `<div class="banner" role="alert">${esc(sig.error)}</div>` : ''}
+        ${wav && sig.wav.fs !== fs ? `<div class="banner info">The file was recorded at ${sig.wav.fs} Hz but the design is at ${fs} Hz, so every frequency below is scaled by ${fmtN(fs / sig.wav.fs, 3)}. Set the sample rate to ${sig.wav.fs} to hear it as recorded.</div>` : ''}
+        ${r.notes.map(n => `<div class="banner info">${esc(n)}</div>`).join('')}</div>
+      <div><div class="slider"><label for="vol">Volume <small class="unit">starts muted, capped at half scale</small></label><span class="big num">${sig.vol}%</span><input type="range" id="vol" min="0" max="100" value="${sig.vol}"></div>
+        <div class="tools play"><button class="btn" data-play="x">Play input</button><button class="btn" data-play="f">Play floating point</button><button class="btn" data-play="q"${r.yQ ? '' : ' disabled'}>Play fixed point</button><button class="btn" id="stopA">Stop</button></div></div>
+    </div></div>
+    <div class="grid2"><div class="col">
+      <div class="panel card"><div class="card-head"><h2>Output spectrum</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)' }, { label: `Fixed point, ${st.q.coef}-bit coefficients, ${st.q.sig}-bit signal`, color: 'var(--s2)' }])}<div class="chart" id="sOut"></div>
+        <p class="caption">The same input through your filter twice: once in floating point, once bit-true in fixed point with the Quantization tab's settings. Where the orange floor sits above the blue, you are seeing round-off noise and coefficient error. ${Number.isFinite(r.snr) ? `Fixed point against floating point: <b class="num">${fmtN(r.snr, 1)} dB</b> signal-to-noise.` : ''}</p><div id="sOutT"></div></div>
+      <div class="panel card"><div class="card-head"><h2>Input spectrum</h2></div><div class="chart" id="sIn"></div><p class="caption">Averaged power spectrum (Welch, Hann window). A full-scale sine reads 0 dB.</p></div></div>
+    <div class="col"><div class="panel card"><div class="card-head"><h2>First samples</h2></div>${legend([{ label: 'Input', color: 'var(--ink-3)', dash: true }, { label: 'Floating point', color: 'var(--s1)' }, { label: 'Fixed point', color: 'var(--s2)' }])}<div class="chart" id="sTime"></div>
+      <p class="caption">The first ${Math.min(400, r.x.length)} samples. The filter delays and reshapes the input; the two outputs should lie on top of each other unless the arithmetic overflowed.</p></div></div></div>`;
+  $$('[data-src]', v).forEach(b => b.addEventListener('click', () => { sig.source = b.dataset.src; sig.error = ''; renderSignal(current); }));
+  $('#wavIn').addEventListener('change', async e => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    sig.error = '';
+    if (f.size > 64 * 1024 * 1024) sig.error = 'That file is larger than 64 MB. A 10 s WAV is far smaller; trim it and try again.';
+    else try {
+      const w = D.parseWav(await f.arrayBuffer());
+      sig.wav = w; sig.name = f.name; sig.source = 'wav';
+      if (w.fs !== state.fs) { const k = w.fs / state.fs; state.edges = state.edges.map(x => Math.round(x * k)); state.fs = w.fs; syncControls(); }
+    } catch (err) { sig.error = `Could not read ${f.name}. ${err.message}`; }
+    render();
+  });
+  $('#vol').addEventListener('input', e => { sig.vol = +e.target.value; $('.slider .big', v).textContent = sig.vol + '%'; if (audio.src) stopAudio(); });
+  $$('[data-play]', v).forEach(b => b.addEventListener('click', () => play(b.dataset.play === 'x' ? r.x : b.dataset.play === 'f' ? r.yF : r.yQ, fs)));
+  $('#stopA').addEventListener('click', stopAudio);
+  const all = [r.sx, r.sF, r.sQ].filter(Boolean).flatMap(s => Array.from(s.db)), top = Math.ceil((Math.max(...all) + 6) / 10) * 10, yd = [top - 140, top];
+  const fr = Array.from(r.sF.f), dbF = Array.from(r.sF.db), dbQ = r.sQ ? Array.from(r.sQ.db) : null;
+  lineChart($('#sOut'), { label: 'Output power spectrum, floating point and fixed point', height: 280, xd: [0, nyq], yd, yLabel: 'Power (dB)', xLabel: 'Frequency (Hz)',
+    series: [{ x: fr, y: dbF }, ...(dbQ ? [{ x: fr, y: dbQ }] : [])], tip: i => `<b>${fmtN(fr[i], 1)} Hz</b><br><span class="sw" style="background:var(--s1)"></span>${fmtN(dbF[i], 1)} dB` + (dbQ ? `<br><span class="sw" style="background:var(--s2)"></span>${fmtN(dbQ[i], 1)} dB` : '') });
+  const step = Math.max(1, Math.floor(fr.length / 32)), rows = []; for (let i = 0; i < fr.length; i += step) rows.push([fmtN(fr[i], 1), fmtN(dbF[i], 1), dbQ ? fmtN(dbQ[i], 1) : 'n/a']);
+  $('#sOutT').innerHTML = tableDetails(['Frequency (Hz)', 'Floating point (dB)', 'Fixed point (dB)'], rows);
+  const dbx = Array.from(r.sx.db);
+  lineChart($('#sIn'), { label: 'Input power spectrum', height: 200, xd: [0, nyq], yd, yLabel: 'Power (dB)', xLabel: 'Frequency (Hz)', series: [{ x: fr, y: dbx, color: 'var(--ink-2)' }], tip: i => `<b>${fmtN(fr[i], 1)} Hz</b><br>${fmtN(dbx[i], 1)} dB` });
+  const n = Math.min(400, r.x.length), idx = Array.from({ length: n }, (_, i) => i), xi = Array.from(r.x.slice(0, n)), yf = Array.from(r.yF.slice(0, n)), yq = r.yQ ? Array.from(r.yQ.slice(0, n)) : null;
+  lineChart($('#sTime'), { label: 'First samples of the input and both outputs', height: 280, xd: [0, n - 1], yd: padRange([...xi, ...yf, ...(yq || [])]), fx: v => Math.round(v), fy: v => fmtN(v, 2), xLabel: 'Sample n',
+    series: [{ x: idx, y: xi, color: 'var(--ink-3)', dash: true }, { x: idx, y: yf, color: 'var(--s1)' }, ...(yq ? [{ x: idx, y: yq, color: 'var(--s2)' }] : [])],   // input drawn first, underneath
+    tip: i => `<b>n = ${i}</b><br>Input ${fmtN(xi[i], 4)}<br><span class="sw" style="background:var(--s1)"></span>${fmtN(yf[i], 4)}` + (yq ? `<br><span class="sw" style="background:var(--s2)"></span>${fmtN(yq[i], 4)}` : '') });
+}
 function renderQuant(d) {
   const st = state, q = st.q, v = $('#view'), qa = quantAnalysis(d, st), nyq = st.fs / 2, iir = d.kind === 'iir';
   const sliderBlock = (id, label, min, max, val, big) => `<div class="slider"><label for="${id}">${label}</label><span class="big num">${big}</span><input type="range" id="${id}" min="${min}" max="${max}" value="${val}"></div>`;
@@ -537,7 +625,8 @@ function render() {
   current = d;
   if (st.orderMode === 'auto' && document.activeElement !== $('#ord')) $('#ord').value = d.kind === 'fir' ? d.taps : d.order;
   $$('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === st.tab)));
-  if (st.tab === 'response') renderResponse(d); else if (st.tab === 'time') renderTime(d); else renderQuant(d);
+  if (st.tab !== 'signal') stopAudio();
+  if (st.tab === 'response') renderResponse(d); else if (st.tab === 'time') renderTime(d); else if (st.tab === 'signal') renderSignal(d); else renderQuant(d);
   if (st.tab === 'response') drawn = true;
   $('#subtitle').textContent = d.title;
   $('#sumSize').textContent = `${d.size}${st.orderMode === 'auto' ? ', picked for you' : ''}`;
@@ -553,7 +642,7 @@ function init() {
   $$('.tabs button').forEach(b => b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); }));
   buildControls(); syncControls();
   let rt; new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => current && render(), 120); }).observe($('#view'));
-  render(); window.__filterlab = { state, designFilter, get current() { return current; } };
+  render(); window.__filterlab = { state, designFilter, sig, get current() { return current; } };
 }
 document.addEventListener('DOMContentLoaded', init);
 })();

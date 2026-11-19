@@ -89,3 +89,10 @@ Format: decision / why / rejected alternative.
 - **UI task 5. Long explanations fold into "How this was checked" / "How the simulation works".** Their wording is unchanged. The honesty tags ("Generated, not synthesized, not run in an HDL simulator", "Interpreted in your browser") and the simulator's plain label stay visible. Rejected: hiding any honesty wording.
 - **UI task 5. Phones open on the plot:** at ≤ 480 px the stage comes first and the design controls follow it, so a tab change visibly changes the screen. Rejected: a bottom sheet for the controls (new interaction code, and more risk than this pass should take).
 - **UI task 5. Control group titles are h2**, which fixes the detector's skipped heading level. The biquad diagram uses the new tokens (panel-well boxes, bezel strokes, DIN name) and keeps diagram-design's earlier rules: orthogonal connectors, masked labels, and two accents for Q and the error-feedback path.
+- **UI task 6. Motion answers actions only.**
+  - Removed: the 0.9 s magnitude-trace "draw" that played on page load.
+  - Added, all inside `prefers-reduced-motion: no-preference`:
+    - a 160 ms fade-and-settle of the view on a tab change (only when the tab actually changes, not on every slider re-render, which would flicker);
+    - a 140 ms reveal when a details panel opens;
+    - 120 ms colour transitions on buttons, tabs and segments.
+  - Caught by `ui_sweep`: an inline comment briefly swallowed the pinned-B series line. It was fixed before commit.

@@ -145,9 +145,13 @@ table.t th { color: var(--ink-3); font-weight: 500; }
 
 @media (max-width: 1180px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 860px) { .app { grid-template-columns: minmax(0, 1fr); padding: 0 12px 24px; } .controls { position: static; max-height: none; } .top { padding: 12px; } .brand span { display: none; } }
+/* motion: only in answer to an action (tab change, a panel opening); nothing plays on load */
 @media (prefers-reduced-motion: no-preference) {
-  .trace.draw { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: draw .9s cubic-bezier(.3, .6, .2, 1) forwards; }
-  @keyframes draw { to { stroke-dashoffset: 0; } }
+  #view.enter { animation: view-in 160ms cubic-bezier(.2, .7, .3, 1); }
+  @keyframes view-in { from { opacity: .35; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  details[open] > :not(summary) { animation: open-in 140ms ease-out; }
+  @keyframes open-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+  .btn, .tabs button, .seg button, details > summary { transition: background-color 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out; }
 }
 
 .check { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 12px; min-height: 44px; cursor: pointer; }
@@ -1562,7 +1566,7 @@ function renderResponse(d) {
   $$('[data-k]', v).forEach(b => b.addEventListener('click', () => { state[b.dataset.k] = b.dataset.v; renderResponse(current); }));
   $('#pinB').addEventListener('click', () => { pinB = pinB ? null : { title: d.title, f: Array.from(d.resp.f), db: Array.from(d.resp.db), fs: st.fs }; renderResponse(current); $('#pinB').focus(); });
   const nyq = st.fs / 2, r = d.resp, fr = Array.from(r.f), bSame = pinB && pinB.fs === st.fs;
-  const series = [{ x: fr, y: Array.from(r.db), draw: true }]; if (pinB) series.push({ x: pinB.f, y: pinB.db, color: 'var(--cmp)', dash: true });
+  const series = [{ x: fr, y: Array.from(r.db) }]; if (pinB) series.push({ x: pinB.f, y: pinB.db, color: 'var(--cmp)', dash: true });
   lineChart($('#cMag'), { label: pinB ? 'Magnitude response in decibels, current design A and pinned design B' : 'Magnitude response in decibels', height: 300, xd: [0, nyq], yd: yDomain(st), yLabel: 'Gain (dB)', xLabel: 'Frequency (Hz)', series,
     shades: magShades(st, d), handles: edgeHandles(st, d), onDrag: onEdgeDrag,
     tip: i => `<b>${fmtN(r.f[i], 1)} Hz</b><br>${pinB ? '<span class="sw" style="background:var(--s1)"></span>A ' : ''}${fmtN(r.db[i], 2)} dB` + (bSame ? `<br><span class="sw dash" style="background:var(--cmp)"></span>B ${fmtN(pinB.db[i], 2)} dB` : '') });
@@ -2095,7 +2099,11 @@ function init() {
   $('#theme').textContent = dark ? 'Light theme' : 'Dark theme';
   $('#theme').addEventListener('click', () => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = t; $('#theme').textContent = t === 'dark' ? 'Light theme' : 'Dark theme'; render(); });
   $('#copyPy').addEventListener('click', () => current && copy(pythonSnippet(current)));
-  $$('.tabs button').forEach(b => b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); }));
+  $$('.tabs button').forEach(b => b.addEventListener('click', () => {
+    if (state.tab === b.dataset.tab) return;
+    state.tab = b.dataset.tab; render();
+    const v = $('#view'); v.classList.toggle('enter', false); void v.offsetWidth; v.classList.add('enter');   // a short fade answers the tab change (CSS skips it under reduced motion)
+  }));
   buildControls(); syncControls();
   let rt; new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => current && render(), 120); }).observe($('#view'));
   render(); window.__filterlab = { state, designFilter, sig, rsim, get current() { return current; } };

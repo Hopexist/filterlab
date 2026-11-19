@@ -21,3 +21,4 @@
 
 - Start: 2026-11-19T19:24:07Z. Hard stop: 20:54:07Z. Branch `auto/rtl-sim` from master 4504ae1 (auto/rtl-export already merged).
 - 19:41Z tasks 1-3 committed; full gate green (91 pytest, 204 cross-checks, test:rtl 22 + simulation skipped, test:rtlsim 80/80, UI sweep + 24 shots); panel screenshots reviewed light/dark at 1440 and 390 px.
+- 19:43Z task 4 (docs) done; full gate green. Independent review started.

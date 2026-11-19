@@ -96,3 +96,10 @@ Format: decision / why / rejected alternative.
     - a 140 ms reveal when a details panel opens;
     - 120 ms colour transitions on buttons, tabs and segments.
   - Caught by `ui_sweep`: an inline comment briefly swallowed the pinned-B series line. It was fixed before commit.
+- **UI task 7. Final check.** I looked at all screenshots: every tab at 1440 px in light and dark, every tab's phone viewport in both themes, the IIR Quantization view and a forced simulator mismatch. Fixed from that look:
+  - the Signal tab's "First samples" now shows 120 samples, not 400 (it was unreadable; the caption says the spectra use the whole run);
+  - legend line samples have a 2 px floor, so the thin quantized sample still reads as orange;
+  - the compare swatch's repeating-gradient stripes are now a dashed border (detector advisory).
+
+  Impeccable's detector afterwards: the file scan and 1440×1000 are clean. At 390×844 it still reports "nested cards" for the segmented control in two card headers. It is a control, not a card, so I logged it as a false positive rather than restyling a working control.
+- **UI task 7. README screenshots** live in `docs/screenshots/`: three curated images (light response, dark quantization, a phone pair), because `shots/` is not committed. `examples/gallery.png` is a matplotlib figure of DSP results, not of the UI, so it was not regenerated.

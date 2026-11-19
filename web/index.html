@@ -173,7 +173,7 @@ table.t th { color: var(--ink-3); font-weight: 500; }
 
 /* captions and compare */
 .caption { color: var(--ink-2); font-size: 13px; line-height: 1.5; margin: 10px 0 0; max-width: 68ch; }
-.sw.dash { background: repeating-linear-gradient(90deg, var(--cmp) 0 5px, transparent 5px 8px) !important; }
+.sw.dash { background: none !important; width: 12px; height: 0; border-radius: 0; border-top: 2px dashed var(--cmp); vertical-align: middle; }   /* a dashed line sample, drawn as a border */
 
 /* DF-I diagram */
 .df-wrap { overflow-x: auto; }
@@ -1530,7 +1530,7 @@ function pzChart(el, cfg) {
   svg.addEventListener('pointerleave', () => { tip.hidden = true; });
 }
 
-const legend = items => `<div class="legend">${items.map(i => `<span><i class="${i.dash ? 'dash' : ''}" style="border-color:${i.color}${i.w ? `;border-top-width:${i.w}px` : ''}"></i>${esc(i.label)}</span>`).join('')}</div>`;
+const legend = items => `<div class="legend">${items.map(i => `<span><i class="${i.dash ? 'dash' : ''}" style="border-color:${i.color}${i.w ? `;border-top-width:${Math.max(i.w, 2)}px` : ''}"></i>${esc(i.label)}</span>`).join('')}</div>`;
 function tableDetails(headers, rows, label = 'Show data table') {
   return `<details class="data"><summary>${label}</summary><div class="scroll"><table class="t"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`;
 }
@@ -1734,7 +1734,7 @@ function renderSignal(d) {
         <p class="caption">The same input through your filter twice: once in floating point, once bit-true in fixed point with the Quantization tab's settings. Where the orange floor sits above the blue, you are seeing round-off noise and coefficient error. ${Number.isFinite(r.snr) ? `Fixed point against floating point: <b class="num">${fmtN(r.snr, 1)} dB</b> signal-to-noise.` : ''}</p><div id="sOutT"></div></div>
       <div class="panel card"><div class="card-head"><h2>Input spectrum</h2></div><div class="chart" id="sIn"></div><p class="caption">Averaged power spectrum (Welch, Hann window). A full-scale sine reads 0 dB.</p></div></div>
     <div class="col"><div class="panel card"><div class="card-head"><h2>First samples</h2></div>${legend([{ label: 'Input', color: 'var(--ink-3)', dash: true }, { label: 'Floating point', color: 'var(--s1)', w: 3.5 }, { w: 1.6, label: 'Fixed point', color: 'var(--s2)' }])}<div class="chart" id="sTime"></div>
-      <p class="caption">The first ${Math.min(400, r.x.length)} samples. The filter delays and reshapes the input; the two outputs should lie on top of each other unless the arithmetic overflowed.</p></div></div></div>`;
+      <p class="caption">The first ${Math.min(120, r.x.length)} samples (the spectra use the whole run). The filter delays and reshapes the input; the two outputs should lie on top of each other unless the arithmetic overflowed.</p></div></div></div>`;
   $$('[data-src]', v).forEach(b => b.addEventListener('click', () => { sig.source = b.dataset.src; sig.error = ''; renderSignal(current); }));
   $('#wavIn').addEventListener('change', async e => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
@@ -1758,7 +1758,7 @@ function renderSignal(d) {
   $('#sOutT').innerHTML = tableDetails(['Frequency (Hz)', 'Floating point (dB)', 'Fixed point (dB)'], rows);
   const dbx = Array.from(r.sx.db);
   lineChart($('#sIn'), { label: 'Input power spectrum', height: 200, xd: [0, nyq], yd, yLabel: 'Power (dB)', xLabel: 'Frequency (Hz)', series: [{ x: fr, y: dbx, color: 'var(--ink-2)' }], tip: i => `<b>${fmtN(fr[i], 1)} Hz</b><br>${fmtN(dbx[i], 1)} dB` });
-  const n = Math.min(400, r.x.length), idx = Array.from({ length: n }, (_, i) => i), xi = Array.from(r.x.slice(0, n)), yf = Array.from(r.yF.slice(0, n)), yq = r.yQ ? Array.from(r.yQ.slice(0, n)) : null;
+  const n = Math.min(120, r.x.length), idx = Array.from({ length: n }, (_, i) => i), xi = Array.from(r.x.slice(0, n)), yf = Array.from(r.yF.slice(0, n)), yq = r.yQ ? Array.from(r.yQ.slice(0, n)) : null;
   lineChart($('#sTime'), { label: 'First samples of the input and both outputs', height: 280, xd: [0, n - 1], yd: padRange([...xi, ...yf, ...(yq || [])]), fx: v => Math.round(v), fy: v => fmtN(v, 2), xLabel: 'Sample n',
     series: [{ x: idx, y: xi, color: 'var(--ink-3)', dash: true }, { x: idx, y: yf, color: 'var(--s1)', w: 3.5 }, ...(yq ? [{ x: idx, y: yq, color: 'var(--s2)', w: 1.6 }] : [])],   // input drawn first, underneath
     tip: i => `<b>n = ${i}</b><br>Input ${fmtN(xi[i], 4)}<br><span class="sw" style="background:var(--s1)"></span>${fmtN(yf[i], 4)}` + (yq ? `<br><span class="sw" style="background:var(--s2)"></span>${fmtN(yq[i], 4)}` : '') });

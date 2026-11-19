@@ -167,7 +167,7 @@ table.t th { color: var(--ink-3); font-weight: 500; }
 
 /* captions and compare */
 .caption { color: var(--ink-2); font-size: 13px; line-height: 1.5; margin: 10px 0 0; max-width: 68ch; }
-.sw.dash { background: repeating-linear-gradient(90deg, var(--cmp) 0 5px, transparent 5px 8px) !important; }
+.sw.dash { background: none !important; width: 12px; height: 0; border-radius: 0; border-top: 2px dashed var(--cmp); vertical-align: middle; }   /* a dashed line sample, drawn as a border */
 
 /* DF-I diagram */
 .df-wrap { overflow-x: auto; }

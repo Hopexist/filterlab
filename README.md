@@ -103,7 +103,18 @@ snake_case and JavaScript names are camelCase; keyword-only Python options becom
 
 ## Interactive app
 
-Open `web/index.html` in a browser (no server, no network). Pick a method and response type, drag the P and S tabs on the magnitude plot to move the band edges, and the filter is redesigned live. "Pin as B" keeps the current magnitude response on the plot (dashed) so you can compare the next design against it. The Quantization tab shows the response and poles before and after rounding, a word-length sweep, measured against predicted round-off noise, and, for IIR filters, a diagram of one biquad with its rounding point. It also has controls for overflow (saturate or wrap), input headroom and error feedback. "Copy Python" reproduces the current design with this library. The Signal tab runs a seeded test signal (three tones plus noise) or a WAV file you upload through the current design, in floating point and bit-true fixed point. It shows the input and output spectra and the first samples, and can play each one (playback starts muted and is capped at half scale). On a phone the views are on a tab bar at the bottom.
+Open `web/index.html` in a browser (no server, no network). Pick a method and response type, drag the P and S tabs on the magnitude plot to move the band edges, and the filter is redesigned live. "Pin as B" keeps the current magnitude response on the plot (dashed) so you can compare the next design against it. The Quantization tab shows the response and poles before and after rounding, a word-length sweep, measured against predicted round-off noise, and, for IIR filters, a diagram of one biquad with its rounding point. It also has controls for overflow (saturate or wrap), input headroom and error feedback. "Copy Python" reproduces the current design with this library. The Signal tab runs a seeded test signal (three tones plus noise) or a WAV file you upload through the current design, in floating point and bit-true fixed point. It shows the input and output spectra and the first samples, and can play each one (playback starts muted and is capped at half scale). On a phone the views are on a tab bar at the bottom, and each view opens on its plot with the design controls below it.
+
+The look is a bench instrument. Each plot is a recessed screen with a graticule, and the readouts (ripple,
+attenuation, taps, word lengths, SNR) are large tabular numbers with small units. Light and dark themes are designed
+separately. Floating-point traces are blue and wide; quantized traces are orange and thin, so the two differ by line
+weight as well as colour. The design notes are in [docs/ui-design.md](docs/ui-design.md).
+
+![Response tab, light theme: magnitude with spec shading and draggable band edges, poles and zeros, spec check](docs/screenshots/response-light.png)
+
+![Quantization tab, dark theme: response before and after rounding, rounding effects, word-length sweep](docs/screenshots/quantization-dark.png)
+
+![Phone layout: Response tab in light, Signal tab in dark](docs/screenshots/phone.png)
 
 Rebuild after editing the sources: `npm run build` (or `python web/build.py`).
 

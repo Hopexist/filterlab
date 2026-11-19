@@ -23,3 +23,7 @@
 - 19:41Z tasks 1-3 committed; full gate green (91 pytest, 204 cross-checks, test:rtl 22 + simulation skipped, test:rtlsim 80/80, UI sweep + 24 shots); panel screenshots reviewed light/dark at 1440 and 390 px.
 - 19:43Z task 4 (docs) done; full gate green. Independent review started.
 - 19:48Z review fixes committed; full gate green (86 interpreter checks); STATUS.md written. Run ends.
+
+# Run log: auto/ui-polish
+
+- Start: 2026-11-19T19:54:00Z. Hard stop: 21:24:00Z. Branch `auto/ui-polish` from master e2ad9ac (auto/rtl-sim merged).

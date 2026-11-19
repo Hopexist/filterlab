@@ -187,3 +187,6 @@ table.t th { color: var(--ink-3); font-weight: 500; }
 .tag { font-size: 12px; color: var(--ink-2); border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; }
 pre.code { max-height: 360px; overflow: auto; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--ink); white-space: pre; tab-size: 2; }
 .caption code { font: 12px ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.sub-h { font-size: 15px; margin: 16px 0 4px; }
+.score.plain .row { grid-template-columns: 1fr auto; }
+.score.plain .sub { grid-column: 1 / -1; }

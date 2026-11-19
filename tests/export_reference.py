@@ -73,6 +73,11 @@ for rows, fmt, ov, hb, ef, sf_, nm in ((s4, f4, "saturate", 0, False, QFormat(0,
                                        (s6, f6, "saturate", 1, True, QFormat(0, 17), "ellip_bp"), (s6, f6, "wrap", 0, False, QFormat(0, 11), "ellip_bp_12")):
     rtl.append({"kind": "sos", "sos": rows, "coef": Fq(fmt), "sig": Fq(sf_), "overflow": ov, "headroom": hb, "ef": ef, "name": nm,
                 "text": gen_sos_sv(np.array(rows), fmt, sf_, overflow=ov, headroom_bits=hb, error_feedback=ef, module_name=nm)})
+from dsp.rtl import csd, rtl_cost_fir, rtl_cost_sos
+for r in rtl:
+    cf_, sf_ = QFormat(*r["coef"]), QFormat(*r["sig"])
+    r["cost"] = rtl_cost_fir(r["h"], cf_, sf_, form=r["form"]) if r["kind"] == "fir" else rtl_cost_sos(r["sos"], cf_, sf_, error_feedback=r["ef"])
+out["rtl_csd"] = [[v, [list(d) for d in csd(v)]] for v in (0, 1, -1, 7, -3, 255, 256, -32768, 8388607, -8388608, 12345, -54321)]
 out["rtl"] = {"designs": rtl, "tb": gen_testbench_sv("fir_t", QFormat(0, 15), 448, "fir_t.hex"),
               "vx": [0, 1, -1, 32767, -32768, 1234], "vy": [5, -5, 0, -32768, 32767, -4321], "hex": vectors_hex([0, 1, -1, 32767, -32768, 1234], [5, -5, 0, -32768, 32767, -4321], QFormat(0, 15))}
 json.dump(out, open(os.path.join(os.path.dirname(__file__), "reference.json"), "w"))

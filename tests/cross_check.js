@@ -118,6 +118,12 @@ for (const r of ref.rtl.designs) {
     : RTL.genSosSv(r.sos, cf, sf, { overflow: r.overflow, headroomBits: r.headroom, errorFeedback: r.ef, moduleName: r.name });
   same(`rtl text ${r.name}`, js, r.text);
 }
+for (const r of ref.rtl.designs) {
+  const cf = D.qFormat(...r.coef), sf = D.qFormat(...r.sig);
+  const c = r.kind === 'fir' ? RTL.rtlCostFir(r.h, cf, sf, { form: r.form }) : RTL.rtlCostSos(r.sos, cf, sf, { errorFeedback: r.ef });
+  close(`rtl cost ${r.name}`, JSON.stringify(c) === JSON.stringify(r.cost) ? 0 : 1, 0, EXACT);
+}
+close('csd digits (12 values incl. word edges)', JSON.stringify(ref.rtl_csd.map(([v]) => RTL.csd(v))) === JSON.stringify(ref.rtl_csd.map(([, d]) => d)) ? 0 : 1, 0, EXACT);
 same('rtl testbench text', RTL.genTestbenchSv('fir_t', D.qFormat(0, 15), 448, 'fir_t.hex'), ref.rtl.tb);
 same('rtl vectors hex', RTL.vectorsHex(ref.rtl.vx, ref.rtl.vy, D.qFormat(0, 15)), ref.rtl.hex);
 console.log(fails ? `\n${fails} of ${count} FAILED` : `\nall ${count} cross-checks passed`); process.exit(fails ? 1 : 0);

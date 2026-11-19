@@ -115,3 +115,20 @@ vvp cheby1_lp.vvp                          # "cheby1_lp: 512 vectors, 0 mismatch
 
 In the app, the Quantization tab's **Hardware export** card gives the same module for the current design and
 settings, plus a testbench and vectors file to download.
+
+## Hardware cost report (counts only)
+
+`csd(v)`, `rtl_cost_fir(h_int, coef_fmt, sig_fmt, *, form)` and `rtl_cost_sos(sos_int, coef_fmt, sig_fmt, *, error_feedback)`
+(JS: `RTL.csd`, `RTL.rtlCostFir`, `RTL.rtlCostSos`, cross-checked) count what the generated structure contains:
+
+- **multipliers**: one general multiplier per non-zero coefficient;
+- **csd_adders**: the adders and subtractors needed if each coefficient multiply is built from shifts of its
+  canonical-signed-digit (non-adjacent) form instead, which is digits minus one per coefficient;
+- **accumulation_adders**: adders that sum the non-zero products, plus the rounding adder (and, with error feedback,
+  the feedback terms and the residual subtractor, whose constants round(a) lie in {-2..2} and are therefore shifts);
+- **acc_bits** (per section for IIR) and **register_bits** (state plus the output register).
+
+These are counts, not area, power or speed: those depend on the target technology and need a synthesis tool,
+which was not available. The counts describe the generated structure as it is. A linear-phase FIR's symmetric
+taps could share multipliers (pre-add `x[n-k] + x[n-N+1+k]` first, roughly halving them), and constant
+multipliers can share sub-expressions. Neither optimisation is generated or counted.

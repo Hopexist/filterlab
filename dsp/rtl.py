@@ -202,3 +202,40 @@ def gen_testbench_sv(module_name, sig_fmt, n_vectors, vectors_file):
         "    $finish;",
         "  end",
         "endmodule", ""])
+
+# ---------- coefficient hardware cost (counts only: no synthesis tool, so no area or timing claims) ----------
+def csd(v):
+    """Canonical signed digit (non-adjacent form) of an integer: [(sign, shift), ...] with v = sum(sign << shift),
+    shifts ascending, no two adjacent non-zero digits; the fewest non-zero digits of any signed-digit form."""
+    v, out, k = int(v), [], 0
+    while v:
+        if v & 1:
+            d = 2 - (v % 4); out.append((d, k)); v -= d
+        v >>= 1; k += 1
+    return out
+
+def _coef_rows(values):
+    return [{"value": int(v), "digits": len(csd(v)), "adders": max(len(csd(v)) - 1, 0)} for v in values]
+
+def rtl_cost_fir(h_int, coef_fmt, sig_fmt, *, form="direct"):
+    """Counts for the generated FIR. multipliers: non-zero taps (general multipliers); csd_adders: adders and
+    subtractors if every tap is instead built as shifts and adds from its CSD digits (digits - 1 each);
+    accumulation_adders: adders summing the non-zero products, plus the rounding adder when SH > 0;
+    acc_bits: accumulator width; register_bits: state plus the output register."""
+    rows = _coef_rows(h_int); nz = sum(r["value"] != 0 for r in rows); W = acc_width_fir(h_int, coef_fmt, sig_fmt); SW = sig_fmt.word
+    return {"coefficients": rows, "multipliers": nz, "csd_adders": sum(r["adders"] for r in rows),
+            "accumulation_adders": max(nz - 1, 0) + (coef_fmt.frac_bits > 0), "acc_bits": W,
+            "register_bits": (len(rows) - 1) * (SW if form == "direct" else W) + SW}
+
+def rtl_cost_sos(sos_int, coef_fmt, sig_fmt, *, error_feedback=False):
+    """Counts for the generated DF-I cascade, as rtl_cost_fir. The error-feedback constants round(a) lie in
+    {-2..2}, so they are shifts: they add accumulation adders and one residual subtractor per section, no multipliers."""
+    sh = coef_fmt.frac_bits; SW = sig_fmt.word; RW = max(sh + 1, 2)
+    rows, accum, widths, regs = [], 0, [], SW
+    for r in sos_int:
+        r = [int(v) for v in r]; rows += _coef_rows(r)
+        terms = sum(v != 0 for v in r) + (sum(c != 0 for c in _ef_coefs(r, sh)) if error_feedback else 0)
+        accum += max(terms - 1, 0) + (sh > 0) + (1 if error_feedback else 0)
+        widths.append(acc_width_sos(r, coef_fmt, sig_fmt, error_feedback)); regs += 4 * SW + (2 * RW if error_feedback else 0)
+    return {"coefficients": rows, "multipliers": sum(r["value"] != 0 for r in rows), "csd_adders": sum(r["adders"] for r in rows),
+            "accumulation_adders": accum, "acc_bits": widths, "register_bits": regs}

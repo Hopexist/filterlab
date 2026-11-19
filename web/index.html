@@ -193,6 +193,9 @@ table.t th { color: var(--ink-3); font-weight: 500; }
 .tag { font-size: 12px; color: var(--ink-2); border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; }
 pre.code { max-height: 360px; overflow: auto; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--ink); white-space: pre; tab-size: 2; }
 .caption code { font: 12px ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.sub-h { font-size: 15px; margin: 16px 0 4px; }
+.score.plain .row { grid-template-columns: 1fr auto; }
+.score.plain .sub { grid-column: 1 / -1; }
 </style>
 </head>
 <body>
@@ -963,7 +966,31 @@ function genTestbenchSv(moduleName, sigFmt, nVectors, vectorsFile) {
     'endmodule', ''].join('\n');
 }
 
-root.RTL = { genFirSv, genSosSv, genTestbenchSv, vectorsHex, accWidthFir, accWidthSos };
+/* coefficient hardware cost (python: csd, rtl_cost_fir, rtl_cost_sos). Counts only: no area or timing claims. */
+function csd(v) { // non-adjacent form: [[sign, shift], ...], shifts ascending
+  const out = []; let k = 0;
+  while (v !== 0) { if (v % 2 !== 0) { const d = 2 - (((v % 4) + 4) % 4); out.push([d, k]); v -= d; } v = v / 2; k++; }
+  return out;
+}
+const coefRows = vals => vals.map(v => { const n = csd(v).length; return { value: v, digits: n, adders: Math.max(n - 1, 0) }; });
+function rtlCostFir(hInt, coefFmt, sigFmt, { form = 'direct' } = {}) {
+  const h = Array.from(hInt, Number), rows = coefRows(h), nz = rows.filter(r => r.value !== 0).length, W = accWidthFir(h, coefFmt, sigFmt), SW = sigFmt.word;
+  return { coefficients: rows, multipliers: nz, csd_adders: rows.reduce((s, r) => s + r.adders, 0),
+    accumulation_adders: Math.max(nz - 1, 0) + (coefFmt.fracBits > 0 ? 1 : 0), acc_bits: W, register_bits: (rows.length - 1) * (form === 'direct' ? SW : W) + SW };
+}
+function rtlCostSos(sosInt, coefFmt, sigFmt, { errorFeedback = false } = {}) {
+  const sh = coefFmt.fracBits, SW = sigFmt.word, RW = Math.max(sh + 1, 2); let rows = [], accum = 0, regs = SW; const widths = [];
+  for (const r0 of sosInt) {
+    const r = Array.from(r0, Number); rows = rows.concat(coefRows(r));
+    const terms = r.filter(v => v !== 0).length + (errorFeedback ? efCoefs(r, sh).filter(c => c !== 0).length : 0);
+    accum += Math.max(terms - 1, 0) + (sh > 0 ? 1 : 0) + (errorFeedback ? 1 : 0);
+    widths.push(accWidthSos(r, coefFmt, sigFmt, errorFeedback)); regs += 4 * SW + (errorFeedback ? 2 * RW : 0);
+  }
+  return { coefficients: rows, multipliers: rows.filter(r => r.value !== 0).length, csd_adders: rows.reduce((s, r) => s + r.adders, 0),
+    accumulation_adders: accum, acc_bits: widths, register_bits: regs };
+}
+
+root.RTL = { csd, rtlCostFir, rtlCostSos, genFirSv, genSosSv, genTestbenchSv, vectorsHex, accWidthFir, accWidthSos };
 if (typeof module !== 'undefined') module.exports = root.RTL;
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
@@ -1454,7 +1481,7 @@ function rtlDesign(d, st) {
   if (d.kind === 'fir') {
     const qf = D.quantizeFir(d.h, q.coef, q.round); if (qf.fmt.fracBits < 0) return { error: 'The coefficient format is coarser than 1; use more coefficient bits.' };
     const hInt = d.h.map(v => D.toInt(v, qf.fmt, q.round)), name = 'filterlab_fir';
-    return { name, sigFmt, text: R.genFirSv(hInt, qf.fmt, sigFmt, { overflow: q.overflow, form: rtlForm, moduleName: name }),
+    return { name, sigFmt, cost: R.rtlCostFir(hInt, qf.fmt, sigFmt, { form: rtlForm }), text: R.genFirSv(hInt, qf.fmt, sigFmt, { overflow: q.overflow, form: rtlForm, moduleName: name }),
       expect: x => D.firFixedSim(hInt.map(v => v * qf.fmt.lsb), x.map(v => v * sigFmt.lsb), qf.fmt, sigFmt, 'nearest', { overflow: q.overflow }).y };
   }
   const qs = D.quantizeSos(d.sos, q.coef, q.round);
@@ -1462,7 +1489,7 @@ function rtlDesign(d, st) {
   if (qs.fmt.fracBits < 0) return { error: 'The coefficient format is coarser than 1; use more coefficient bits.' };
   const rows = qs.sq.map(s => [0, 1, 2, 4, 5].map(i => D.toInt(s[i], qs.fmt, 'nearest'))), name = 'filterlab_sos';
   const sosF = rows.map(r => [r[0], r[1], r[2], 1, r[3], r[4]].map((v, i) => i === 3 ? 1 : v * qs.fmt.lsb));
-  return { name, sigFmt, gain: qs.gain * Math.pow(2, q.headroom),
+  return { name, sigFmt, gain: qs.gain * Math.pow(2, q.headroom), cost: window.RTL.rtlCostSos(rows, qs.fmt, sigFmt, { errorFeedback: q.ef }),
     text: window.RTL.genSosSv(rows, qs.fmt, sigFmt, { overflow: q.overflow, headroomBits: q.headroom, errorFeedback: q.ef, moduleName: name }),
     expect: x => D.sosFixedSim(sosF, x.map(v => v * sigFmt.lsb), qs.fmt, sigFmt, 'nearest', { overflow: q.overflow, headroomBits: q.headroom, errorFeedback: q.ef }).y };
 }
@@ -1489,11 +1516,22 @@ function rtlCard(d) {
     <p class="caption">A synthesizable SystemVerilog module whose arithmetic matches this tab's fixed-point simulation bit for bit: ${q.coef}-bit coefficients, a ${q.sig}-bit signal, ${q.overflow === 'wrap' ? 'wrap-around' : 'saturating'} overflow${d.kind === 'iir' ? `, ${q.headroom} bit${q.headroom === 1 ? '' : 's'} of headroom${q.ef ? ', error feedback' : ''}` : ''}.</p>
     <p class="caption">It assumes one clock, a synchronous active-high reset (<code>rst</code>), and one new sample per clock when <code>in_valid</code> is high. <code>out_data</code> and <code>out_valid</code> arrive one clock later. There is no pipelining, so the whole multiply-add chain must fit in one clock period.${d.kind === 'iir' ? ` The output is the cascade output: multiply it by ${fmtN(r.gain, 4)} (the leftover scaling gain${q.headroom ? ' times 2^' + q.headroom : ''}) downstream.` : ''}</p>
     <p class="caption">"Not simulated": no HDL simulator was available where this was built. The test suite runs the generated text through an independent evaluator and compares it with the Python bit-true simulator; run the testbench with Icarus Verilog to check it yourself.</p>
+    <div id="rtlCost"></div>
     <details class="data"><summary>Show the module</summary><pre class="code" id="rtlText"></pre></details></div>`;
 }
 function wireRtl(d) {
+  const r = rtlDesign(d, state); if (r.error) { const sel = $('#rtlForm'); if (sel) { sel.value = rtlForm; sel.onchange = e => { rtlForm = e.target.value; renderQuant(current); }; } return; }
+  const c = r.cost, n = c.coefficients.length, nz = c.multipliers, acc = Array.isArray(c.acc_bits) ? c.acc_bits.join(', ') : c.acc_bits;
+  if (c) $('#rtlCost').innerHTML = `<h3 class="sub-h">Hardware cost (counts, not area)</h3><div class="score plain">
+    <div class="row"><span class="lab">General multipliers</span><span class="val num">${nz}</span><span class="sub">One per non-zero coefficient (${n} coefficients, ${n - nz} zero).</span></div>
+    <div class="row"><span class="lab">Shift-and-add adders instead</span><span class="val num">${c.csd_adders}</span><span class="sub">If every coefficient is built from its canonical-signed-digit (CSD) form: digits minus one per coefficient.</span></div>
+    <div class="row"><span class="lab">Accumulation adders</span><span class="val num">${c.accumulation_adders}</span><span class="sub">Summing the products, plus rounding${state.q.ef && d.kind === 'iir' ? ' and the error-feedback terms' : ''}.</span></div>
+    <div class="row"><span class="lab">Accumulator width</span><span class="val num">${acc} bits</span><span class="sub">${Array.isArray(c.acc_bits) ? 'Per section. ' : ''}Smallest width that cannot overflow for any input (docs/rtl.md).</span></div>
+    <div class="row"><span class="lab">State and output registers</span><span class="val num">${c.register_bits} bits</span></div></div>
+    <p class="caption">These are counts from the generated structure. Area, power and maximum clock speed depend on the target and need a synthesis tool, so none are given.</p>
+    ${tableDetails(['Coefficient (integer)', 'CSD digits', 'Adders if shift-add'], c.coefficients.map(x => [x.value, x.digits, x.adders]), 'Show per-coefficient CSD')}`;
   const sel = $('#rtlForm'); if (sel) { sel.value = rtlForm; sel.onchange = e => { rtlForm = e.target.value; renderQuant(current); $('#rtlForm').focus(); }; }
-  const r = rtlDesign(d, state); if (r.error) return;
+  if (r.error) return;
   $('#rtlText').textContent = r.text;
   $('#rtlCopy').onclick = () => copy(r.text);
   $('#rtlDl').onclick = () => download(`${r.name}.sv`, r.text);

@@ -120,3 +120,31 @@ process.stdout.write(JSON.stringify(out));"""
     assert len(cases) == 3
     for c in cases:
         assert rtl_eval.run(c["text"], c["x"]) == c["y"]
+
+# ---- stretch: coefficient hardware cost (counts only; no area or timing claims) ----
+from dsp.rtl import csd, rtl_cost_fir, rtl_cost_sos
+
+def test_csd_is_minimal_signed_digit_form():
+    assert csd(0) == [] and csd(1) == [(1, 0)] and csd(7) == [(-1, 0), (1, 3)] and csd(-3) == [(1, 0), (-1, 2)]
+    rng = np.random.default_rng(0)
+    for v in list(rng.integers(-2 ** 23, 2 ** 23, 400)) + [2 ** 23 - 1, -2 ** 23, 5, -5, 255, 256]:
+        d = csd(int(v))
+        assert sum(s << k for s, k in d) == v                                     # exact
+        ks = [k for _, k in d]; assert all(b - a >= 2 for a, b in zip(ks, ks[1:]))   # no two adjacent non-zero digits
+        assert len(d) <= len(bin(abs(int(v)))) // 2 + 1                          # at most about half the bits
+
+def test_fir_cost_counts():
+    h_int = [3, 0, -8, 7]                    # csd digits 2, 0, 1, 2
+    c = rtl_cost_fir(h_int, QFormat(3, 0), QFormat(0, 7), form="direct")
+    assert [r["digits"] for r in c["coefficients"]] == [2, 0, 1, 2]
+    assert c["multipliers"] == 3 and c["csd_adders"] == 2 and c["accumulation_adders"] == 2
+    assert c["acc_bits"] == acc_width_fir(h_int, QFormat(3, 0), QFormat(0, 7)) and c["register_bits"] == 3 * 8 + 8
+    assert rtl_cost_fir(h_int, QFormat(3, 0), QFormat(0, 7), form="transposed")["register_bits"] == 3 * c["acc_bits"] + 8
+
+def test_sos_cost_counts():
+    rows = [[4096, 8192, 4096, -7000, 3000]]; cf = QFormat(1, 12); sf = QFormat(0, 15)
+    c = rtl_cost_sos(rows, cf, sf)
+    assert c["multipliers"] == 5 and c["accumulation_adders"] == 4 + 1             # 5 products, rounding adder
+    assert c["csd_adders"] == sum(len(csd(v)) - 1 for v in rows[0] if v)
+    ce = rtl_cost_sos(rows, cf, sf, error_feedback=True)
+    assert ce["accumulation_adders"] > c["accumulation_adders"] and ce["acc_bits"] == [acc_width_sos(rows[0], cf, sf, True)]

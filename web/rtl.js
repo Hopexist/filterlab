@@ -145,6 +145,30 @@ function genTestbenchSv(moduleName, sigFmt, nVectors, vectorsFile) {
     'endmodule', ''].join('\n');
 }
 
-root.RTL = { genFirSv, genSosSv, genTestbenchSv, vectorsHex, accWidthFir, accWidthSos };
+/* coefficient hardware cost (python: csd, rtl_cost_fir, rtl_cost_sos). Counts only: no area or timing claims. */
+function csd(v) { // non-adjacent form: [[sign, shift], ...], shifts ascending
+  const out = []; let k = 0;
+  while (v !== 0) { if (v % 2 !== 0) { const d = 2 - (((v % 4) + 4) % 4); out.push([d, k]); v -= d; } v = v / 2; k++; }
+  return out;
+}
+const coefRows = vals => vals.map(v => { const n = csd(v).length; return { value: v, digits: n, adders: Math.max(n - 1, 0) }; });
+function rtlCostFir(hInt, coefFmt, sigFmt, { form = 'direct' } = {}) {
+  const h = Array.from(hInt, Number), rows = coefRows(h), nz = rows.filter(r => r.value !== 0).length, W = accWidthFir(h, coefFmt, sigFmt), SW = sigFmt.word;
+  return { coefficients: rows, multipliers: nz, csd_adders: rows.reduce((s, r) => s + r.adders, 0),
+    accumulation_adders: Math.max(nz - 1, 0) + (coefFmt.fracBits > 0 ? 1 : 0), acc_bits: W, register_bits: (rows.length - 1) * (form === 'direct' ? SW : W) + SW };
+}
+function rtlCostSos(sosInt, coefFmt, sigFmt, { errorFeedback = false } = {}) {
+  const sh = coefFmt.fracBits, SW = sigFmt.word, RW = Math.max(sh + 1, 2); let rows = [], accum = 0, regs = SW; const widths = [];
+  for (const r0 of sosInt) {
+    const r = Array.from(r0, Number); rows = rows.concat(coefRows(r));
+    const terms = r.filter(v => v !== 0).length + (errorFeedback ? efCoefs(r, sh).filter(c => c !== 0).length : 0);
+    accum += Math.max(terms - 1, 0) + (sh > 0 ? 1 : 0) + (errorFeedback ? 1 : 0);
+    widths.push(accWidthSos(r, coefFmt, sigFmt, errorFeedback)); regs += 4 * SW + (errorFeedback ? 2 * RW : 0);
+  }
+  return { coefficients: rows, multipliers: rows.filter(r => r.value !== 0).length, csd_adders: rows.reduce((s, r) => s + r.adders, 0),
+    accumulation_adders: accum, acc_bits: widths, register_bits: regs };
+}
+
+root.RTL = { csd, rtlCostFir, rtlCostSos, genFirSv, genSosSv, genTestbenchSv, vectorsHex, accWidthFir, accWidthSos };
 if (typeof module !== 'undefined') module.exports = root.RTL;
 })(typeof window !== 'undefined' ? window : globalThis);

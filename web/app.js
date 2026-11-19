@@ -485,7 +485,7 @@ function rtlDesign(d, st) {
   if (d.kind === 'fir') {
     const qf = D.quantizeFir(d.h, q.coef, q.round); if (qf.fmt.fracBits < 0) return { error: 'The coefficient format is coarser than 1; use more coefficient bits.' };
     const hInt = d.h.map(v => D.toInt(v, qf.fmt, q.round)), name = 'filterlab_fir';
-    return { name, sigFmt, text: R.genFirSv(hInt, qf.fmt, sigFmt, { overflow: q.overflow, form: rtlForm, moduleName: name }),
+    return { name, sigFmt, cost: R.rtlCostFir(hInt, qf.fmt, sigFmt, { form: rtlForm }), text: R.genFirSv(hInt, qf.fmt, sigFmt, { overflow: q.overflow, form: rtlForm, moduleName: name }),
       expect: x => D.firFixedSim(hInt.map(v => v * qf.fmt.lsb), x.map(v => v * sigFmt.lsb), qf.fmt, sigFmt, 'nearest', { overflow: q.overflow }).y };
   }
   const qs = D.quantizeSos(d.sos, q.coef, q.round);
@@ -493,7 +493,7 @@ function rtlDesign(d, st) {
   if (qs.fmt.fracBits < 0) return { error: 'The coefficient format is coarser than 1; use more coefficient bits.' };
   const rows = qs.sq.map(s => [0, 1, 2, 4, 5].map(i => D.toInt(s[i], qs.fmt, 'nearest'))), name = 'filterlab_sos';
   const sosF = rows.map(r => [r[0], r[1], r[2], 1, r[3], r[4]].map((v, i) => i === 3 ? 1 : v * qs.fmt.lsb));
-  return { name, sigFmt, gain: qs.gain * Math.pow(2, q.headroom),
+  return { name, sigFmt, gain: qs.gain * Math.pow(2, q.headroom), cost: window.RTL.rtlCostSos(rows, qs.fmt, sigFmt, { errorFeedback: q.ef }),
     text: window.RTL.genSosSv(rows, qs.fmt, sigFmt, { overflow: q.overflow, headroomBits: q.headroom, errorFeedback: q.ef, moduleName: name }),
     expect: x => D.sosFixedSim(sosF, x.map(v => v * sigFmt.lsb), qs.fmt, sigFmt, 'nearest', { overflow: q.overflow, headroomBits: q.headroom, errorFeedback: q.ef }).y };
 }
@@ -520,11 +520,22 @@ function rtlCard(d) {
     <p class="caption">A synthesizable SystemVerilog module whose arithmetic matches this tab's fixed-point simulation bit for bit: ${q.coef}-bit coefficients, a ${q.sig}-bit signal, ${q.overflow === 'wrap' ? 'wrap-around' : 'saturating'} overflow${d.kind === 'iir' ? `, ${q.headroom} bit${q.headroom === 1 ? '' : 's'} of headroom${q.ef ? ', error feedback' : ''}` : ''}.</p>
     <p class="caption">It assumes one clock, a synchronous active-high reset (<code>rst</code>), and one new sample per clock when <code>in_valid</code> is high. <code>out_data</code> and <code>out_valid</code> arrive one clock later. There is no pipelining, so the whole multiply-add chain must fit in one clock period.${d.kind === 'iir' ? ` The output is the cascade output: multiply it by ${fmtN(r.gain, 4)} (the leftover scaling gain${q.headroom ? ' times 2^' + q.headroom : ''}) downstream.` : ''}</p>
     <p class="caption">"Not simulated": no HDL simulator was available where this was built. The test suite runs the generated text through an independent evaluator and compares it with the Python bit-true simulator; run the testbench with Icarus Verilog to check it yourself.</p>
+    <div id="rtlCost"></div>
     <details class="data"><summary>Show the module</summary><pre class="code" id="rtlText"></pre></details></div>`;
 }
 function wireRtl(d) {
+  const r = rtlDesign(d, state); if (r.error) { const sel = $('#rtlForm'); if (sel) { sel.value = rtlForm; sel.onchange = e => { rtlForm = e.target.value; renderQuant(current); }; } return; }
+  const c = r.cost, n = c.coefficients.length, nz = c.multipliers, acc = Array.isArray(c.acc_bits) ? c.acc_bits.join(', ') : c.acc_bits;
+  if (c) $('#rtlCost').innerHTML = `<h3 class="sub-h">Hardware cost (counts, not area)</h3><div class="score plain">
+    <div class="row"><span class="lab">General multipliers</span><span class="val num">${nz}</span><span class="sub">One per non-zero coefficient (${n} coefficients, ${n - nz} zero).</span></div>
+    <div class="row"><span class="lab">Shift-and-add adders instead</span><span class="val num">${c.csd_adders}</span><span class="sub">If every coefficient is built from its canonical-signed-digit (CSD) form: digits minus one per coefficient.</span></div>
+    <div class="row"><span class="lab">Accumulation adders</span><span class="val num">${c.accumulation_adders}</span><span class="sub">Summing the products, plus rounding${state.q.ef && d.kind === 'iir' ? ' and the error-feedback terms' : ''}.</span></div>
+    <div class="row"><span class="lab">Accumulator width</span><span class="val num">${acc} bits</span><span class="sub">${Array.isArray(c.acc_bits) ? 'Per section. ' : ''}Smallest width that cannot overflow for any input (docs/rtl.md).</span></div>
+    <div class="row"><span class="lab">State and output registers</span><span class="val num">${c.register_bits} bits</span></div></div>
+    <p class="caption">These are counts from the generated structure. Area, power and maximum clock speed depend on the target and need a synthesis tool, so none are given.</p>
+    ${tableDetails(['Coefficient (integer)', 'CSD digits', 'Adders if shift-add'], c.coefficients.map(x => [x.value, x.digits, x.adders]), 'Show per-coefficient CSD')}`;
   const sel = $('#rtlForm'); if (sel) { sel.value = rtlForm; sel.onchange = e => { rtlForm = e.target.value; renderQuant(current); $('#rtlForm').focus(); }; }
-  const r = rtlDesign(d, state); if (r.error) return;
+  if (r.error) return;
   $('#rtlText').textContent = r.text;
   $('#rtlCopy').onclick = () => copy(r.text);
   $('#rtlDl').onclick = () => download(`${r.name}.sv`, r.text);

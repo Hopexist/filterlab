@@ -84,18 +84,30 @@ function bweights(x) {
 
 /** bands: flat edge list in Hz; desired/weight per band. Odd numtaps only. */
 function remez(numtaps, bands, desired, weight, fs, opts = {}) {
-  const gridDensity = opts.gridDensity || 20, maxiter = opts.maxiter || 80, tol = opts.tol || 1e-9;
-  if (numtaps % 2 === 0) throw new Error('odd numtaps required');
-  const M = (numtaps - 1) / 2, R = M + 2;
+  const gridDensity = opts.gridDensity || 20, maxiter = opts.maxiter || 80, tol = opts.tol || 1e-9, kind = opts.kind || 'bandpass';
+  if (!['bandpass', 'hilbert', 'differentiator'].includes(kind)) throw new Error(`kind must be 'bandpass', 'hilbert' or 'differentiator', not '${kind}'`);
+  const odd = numtaps % 2 === 1, anti = kind !== 'bandpass';
   const edges = bands.map(b => b / (fs / 2) * PI); const nb = edges.length / 2;
   weight = weight || new Array(nb).fill(1);
+  for (let b = 0; b < nb; b++) if (!odd && !anti && Math.abs(edges[2 * b + 1] - PI) < 1e-12 && desired[b] !== 0)
+    throw new Error('even numtaps gives a type II filter, which has a forced zero at fs/2; a band ending at fs/2 must have desired gain 0, or use an odd numtaps');
+  const Lt = Math.floor(numtaps / 2) + (odd && !anti ? 1 : 0); // terms in P
+  const Qf = odd && !anti ? (() => 1) : !anti ? (w => Math.cos(w / 2)) : odd ? (w => Math.sin(w)) : (w => Math.sin(w / 2));
+  const M = Lt - 1, R = M + 2;
+  const delf = PI / (gridDensity * Lt); // keep the grid off the forced zeros of Qf, as scipy does
+  if (anti && edges[0] < delf) edges[0] = delf;
+  if (anti === odd && edges[edges.length - 1] > PI - delf) edges[edges.length - 1] = PI - delf;
   const widths = []; let wsum = 0;
   for (let b = 0; b < nb; b++) { widths.push(edges[2 * b + 1] - edges[2 * b]); wsum += widths[b]; }
   const total = gridDensity * (M + 1);
   const wl = [], Dl = [], Wl = [], starts = []; let pos = 0;
   for (let b = 0; b < nb; b++) {
     const n = Math.max(Math.round(total * widths[b] / wsum), 8);
-    for (let i = 0; i < n; i++) { wl.push(edges[2 * b] + (edges[2 * b + 1] - edges[2 * b]) * i / (n - 1)); Dl.push(desired[b]); Wl.push(weight[b]); }
+    for (let i = 0; i < n; i++) {
+      const wv = edges[2 * b] + (edges[2 * b + 1] - edges[2 * b]) * i / (n - 1), f = wv / (2 * PI), q = Qf(wv);
+      const dv = kind === 'differentiator' ? desired[b] * f : desired[b], wt = kind === 'differentiator' && desired[b] >= 1e-4 ? weight[b] / f : weight[b];
+      wl.push(wv); Dl.push(dv / q); Wl.push(wt * q);
+    }
     starts.push([pos, pos + n]); pos += n;
   }
   const L = wl.length, w = Float64Array.from(wl), D = Float64Array.from(Dl), W = Float64Array.from(Wl);
@@ -138,11 +150,20 @@ function remez(numtaps, bands, desired, weight, fs, opts = {}) {
     if (same || (Q - Math.abs(delta)) / Q < tol) break;
   }
   const sol = solve(ext); delta = sol.dl;
-  const Ak = bary(Float64Array.from({ length: M + 1 }, (_, k) => Math.cos(2 * PI * k / numtaps)), sol.xs, sol.Cs, sol.bs);
   const h = new Float64Array(numtaps);
-  for (let n = 0; n < numtaps; n++) {
-    let s = Ak[0]; for (let k = 1; k <= M; k++) s += 2 * Ak[k] * Math.cos(2 * PI * k / numtaps * (n - M));
-    h[n] = s / numtaps;
+  if (odd && !anti) { // type I: closed form
+    const Ak = bary(Float64Array.from({ length: M + 1 }, (_, k) => Math.cos(2 * PI * k / numtaps)), sol.xs, sol.Cs, sol.bs);
+    for (let n = 0; n < numtaps; n++) {
+      let s = Ak[0]; for (let k = 1; k <= M; k++) s += 2 * Ak[k] * Math.cos(2 * PI * k / numtaps * (n - M));
+      h[n] = s / numtaps;
+    }
+  } else { // inverse DFT of the amplitude at the N DFT frequencies (Qf carries the sign past pi)
+    const wk = Float64Array.from({ length: numtaps }, (_, k) => 2 * PI * k / numtaps);
+    const P = bary(wk.map(Math.cos), sol.xs, sol.Cs, sol.bs), al = (numtaps - 1) / 2;
+    for (let n = 0; n < numtaps; n++) {
+      let s = 0; for (let k = 0; k < numtaps; k++) { const a = Qf(wk[k]) * P[k], t = wk[k] * (n - al); s += anti ? -a * Math.sin(t) : a * Math.cos(t); }
+      h[n] = s / numtaps;
+    }
   }
   return { h, delta: Math.abs(delta), iterations: it + 1 };
 }
@@ -163,6 +184,46 @@ function cheb2ap(N, rs) {
     p.push(cdiv(cx(1, 0), cx(Math.sinh(mu) * q.re, Math.cosh(mu) * q.im)));
   }
   const k = cdiv(cprod(p.map(x => cscale(x, -1))), cprod(z.map(x => cscale(x, -1)))).re;
+  return { z, p, k };
+}
+// elliptic: complete integrals and Jacobi functions by the AGM (python: dsp/iir.py)
+function agm(a, b) { for (let i = 0; i < 64 && Math.abs(a - b) > 1e-16 * a; i++) { const t = (a + b) / 2; b = Math.sqrt(a * b); a = t; } return a; }
+const ellipk = m => PI / (2 * agm(1, Math.sqrt(1 - m))), ellipkm1 = p => PI / (2 * agm(1, Math.sqrt(p)));
+function ellipj(u, m) { // sn, cn, dn for real u, 0 <= m < 1
+  if (m < 1e-12) return [Math.sin(u), Math.cos(u), 1];
+  const a = [1], c = [Math.sqrt(m)]; let b = Math.sqrt(1 - m);
+  while (Math.abs(c[c.length - 1]) > 1e-16 && a.length < 64) { const a_ = a[a.length - 1], b_ = b; a.push((a_ + b_) / 2); c.push((a_ - b_) / 2); b = Math.sqrt(a_ * b_); }
+  const n = a.length - 1; let phi = Math.pow(2, n) * a[n] * u, prev = phi;
+  for (let i = n; i > 0; i--) { prev = phi; phi = (phi + Math.asin(c[i] / a[i] * Math.sin(phi))) / 2; }
+  return [Math.sin(phi), Math.cos(phi), Math.cos(phi) / Math.cos(prev - phi)];
+}
+function ellipdeg(n, m1) {
+  const q = Math.pow(Math.exp(-PI * ellipkm1(m1) / ellipk(m1)), 1 / n); let num = 0, den = 1;
+  for (let j = 0; j < 8; j++) { num += Math.pow(q, j * (j + 1)); den += 2 * Math.pow(q, (j + 1) * (j + 1)); }
+  return 16 * q * Math.pow(num / den, 4);
+}
+function arcJacSc1(w, m) { // real v with sc(v, 1 - m) = w; descending Landen (the iterate stays on the imaginary axis)
+  const comp = x => Math.sqrt((1 - x) * (1 + x)), ks = [Math.sqrt(m)];
+  while (ks[ks.length - 1] !== 0 && ks.length < 20) { const kp = comp(ks[ks.length - 1]); ks.push((1 - kp) / (1 + kp)); }
+  let K = PI / 2; for (let i = 1; i < ks.length; i++) K *= 1 + ks[i];
+  let v = w; for (let i = 0; i + 1 < ks.length; i++) v = 2 * v / ((1 + ks[i + 1]) * (1 + Math.sqrt(1 + ks[i] * ks[i] * v * v)));
+  return K * 2 / PI * Math.asinh(v);
+}
+function ellipap(N, rp, rs) {
+  const eps2 = Math.pow(10, rp / 10) - 1;
+  if (N === 1) { const p = -Math.sqrt(1 / eps2); return { z: [], p: [cx(p)], k: -p }; }
+  const m1 = eps2 / (Math.pow(10, rs / 10) - 1), m = ellipdeg(N, m1), K = ellipk(m);
+  const S = [], C = [], Dn = [];
+  for (let j = 1 - N % 2; j < N; j += 2) { const [s, c, d] = ellipj(j * K / N, m); S.push(s); C.push(c); Dn.push(d); }
+  const zs = S.filter(s => Math.abs(s) > 1e-14).map(s => cx(0, 1 / (Math.sqrt(m) * s)));
+  const z = zs.concat(zs.map(cconj));
+  const v0 = K * arcJacSc1(1 / Math.sqrt(eps2), m1) / (N * ellipk(m1));
+  const [sv, cv, dv] = ellipj(v0, 1 - m);
+  let p = S.map((s, i) => { const den = 1 - Math.pow(Dn[i] * sv, 2); return cx(-(C[i] * Dn[i] * sv * cv) / den, -(s * dv) / den); });
+  if (N % 2) { const nrm = Math.sqrt(p.reduce((a, x) => a + x.re * x.re + x.im * x.im, 0)); p = p.concat(p.filter(x => Math.abs(x.im) > 1e-14 * nrm).map(cconj)); }
+  else p = p.concat(p.map(cconj));
+  let k = cdiv(cprod(p.map(x => cscale(x, -1))), cprod(z.map(x => cscale(x, -1)))).re;
+  if (N % 2 === 0) k /= Math.sqrt(1 + eps2);
   return { z, p, k };
 }
 const deg = (z, p) => p.length - z.length;
@@ -192,10 +253,10 @@ function bilinear({ z, p, k }, fs) {
 }
 const prewarp = (f, fs) => 2 * fs * Math.tan(PI * f / fs);
 
-/** kind: butter|cheby1|cheby2; btype lp|hp|bp|bs; edges [f] or [f1,f2] Hz.
+/** kind: butter|cheby1|cheby2|ellip; btype lp|hp|bp|bs; edges [f] or [f1,f2] Hz.
  *  protoScale: optional analog prototype cutoff scale (used to put Butterworth -Rp dB at the passband edge). */
 function designIIR(kind, btype, order, edges, fs, rp = 1, rs = 40, protoScale = 1) {
-  let proto = kind === 'butter' ? buttap(order) : kind === 'cheby1' ? cheb1ap(order, rp) : cheb2ap(order, rs);
+  let proto = kind === 'butter' ? buttap(order) : kind === 'cheby1' ? cheb1ap(order, rp) : kind === 'ellip' ? ellipap(order, rp, rs) : cheb2ap(order, rs);
   if (protoScale !== 1) proto = lp2lp(proto, protoScale);
   const wa = edges.map(e => prewarp(e, fs)); let t;
   if (btype === 'lowpass') t = lp2lp(proto, wa[0]);
@@ -213,7 +274,9 @@ function minOrder(kind, btype, passband, stopband, gp_db, gs_db, fs) {
   else if (btype === 'bandpass') nat = Math.min(...ws.map(s => Math.abs((s * s - wp[0] * wp[1]) / (s * (wp[1] - wp[0])))));
   else { nat = Math.min(...ws.map(s => Math.abs(s * (wp[1] - wp[0]) / (s * s - wp[0] * wp[1])))); if (nat < 1) nat = 1 / nat; }
   const gp = Math.pow(10, gp_db / 10) - 1, gs = Math.pow(10, gs_db / 10) - 1;
-  const n = kind === 'butter' ? Math.log10(gs / gp) / (2 * Math.log10(nat)) : Math.acosh(Math.sqrt(gs / gp)) / Math.acosh(nat);
+  const n = kind === 'butter' ? Math.log10(gs / gp) / (2 * Math.log10(nat))
+    : kind === 'ellip' ? ellipk(1 / (nat * nat)) * ellipkm1(gp / gs) / (ellipkm1(1 / (nat * nat)) * ellipk(gp / gs))
+    : Math.acosh(Math.sqrt(gs / gp)) / Math.acosh(nat);
   return Math.max(1, Math.ceil(n - 1e-12));
 }
 
@@ -341,10 +404,15 @@ function measure(resp, bands) {
 /* ---------------- fixed-point quantization ---------------- */
 function qFormat(intBits, fracBits) { return { intBits, fracBits, word: 1 + intBits + fracBits, lsb: Math.pow(2, -fracBits) }; }
 function autoFormat(maxAbs, word) { const m = maxAbs < 1 ? 0 : Math.floor(Math.log2(maxAbs)) + 1; return qFormat(m, word - 1 - m); }
-function toInt(x, fmt, rounding = 'nearest') {
+function limit(v, lo, hi, overflow) { // clamp, or two's-complement wrap (python: _limit)
+  if (overflow === 'wrap') { const R = hi - lo + 1; return (((v - lo) % R) + R) % R + lo; }
+  return Math.min(hi, Math.max(lo, v));
+}
+function checkOverflow(o) { if (o !== 'saturate' && o !== 'wrap') throw new Error(`overflow must be 'saturate' or 'wrap', not '${o}'`); }
+function toInt(x, fmt, rounding = 'nearest', overflow = 'saturate') {
   const s = x * Math.pow(2, fmt.fracBits), lo = -Math.pow(2, fmt.word - 1), hi = Math.pow(2, fmt.word - 1) - 1;
   const q = rounding === 'nearest' ? Math.floor(s + 0.5) : rounding === 'floor' ? Math.floor(s) : Math.trunc(s);
-  return Math.min(hi, Math.max(lo, q));
+  return limit(q, lo, hi, overflow);
 }
 const quantize = (x, fmt, rounding) => toInt(x, fmt, rounding) * fmt.lsb;
 const maxAbs = a => a.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
@@ -385,27 +453,37 @@ function testSignal(n, sigma, seed = 7) {
   for (let i = 0; i < n; i += 2) { const u = Math.max(r(), 1e-12), v = r(); const m = Math.sqrt(-2 * Math.log(u)) * sigma; x[i] = Math.max(-0.99, Math.min(0.99, m * Math.cos(2 * PI * v))); if (i + 1 < n) x[i + 1] = Math.max(-0.99, Math.min(0.99, m * Math.sin(2 * PI * v))); }
   return x;
 }
-function firFixedSim(h, x, coefFmt, sigFmt, rounding) {
+function firFixedSim(h, x, coefFmt, sigFmt, rounding, { overflow = 'saturate' } = {}) {
+  checkOverflow(overflow);
   const hi = Array.from(h, v => toInt(v, coefFmt, rounding)), xi = Array.from(x, v => toInt(v, sigFmt, 'nearest'));
   const sh = coefFmt.fracBits, lo = -Math.pow(2, sigFmt.word - 1), hiV = Math.pow(2, sigFmt.word - 1) - 1, den = Math.pow(2, sh);
   const n = x.length, y = new Float64Array(n), yq = new Float64Array(n), yi = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     let acc = 0, accF = 0, accI = 0;
     for (let k = 0; k < hi.length && k <= i; k++) { acc += hi[k] * xi[i - k]; accF += h[k] * x[i - k]; }
-    const r = Math.min(hiV, Math.max(lo, Math.floor(acc / den + 0.5)));
+    const r = limit(Math.floor(acc / den + 0.5), lo, hiV, overflow);
     y[i] = r * sigFmt.lsb; yq[i] = acc / den * sigFmt.lsb; yi[i] = accF;
   }
   return { y, yq, yIdeal: yi };
 }
-function sosFixedSim(sos, x, coefFmt, sigFmt, rounding) {
-  const sh = coefFmt.fracBits, den = Math.pow(2, sh), lo = -Math.pow(2, sigFmt.word - 1), hiV = Math.pow(2, sigFmt.word - 1) - 1;
-  let cur = Array.from(x, v => toInt(v, sigFmt, 'nearest')); const xq = cur.map(v => v * sigFmt.lsb);
+/** opts: overflow 'saturate'|'wrap'; headroomBits: input scaled by 2^-h before quantization (all three outputs
+ *  are in that scale; multiply by 2^h to undo); errorFeedback: c = round(a), acc' = acc - c1 r1 - c2 r2, r = acc' - y 2^sh. */
+function sosFixedSim(sos, x, coefFmt, sigFmt, rounding, { overflow = 'saturate', headroomBits = 0, errorFeedback = false } = {}) {
+  checkOverflow(overflow);
+  const sh = coefFmt.fracBits, den = Math.pow(2, sh), lo = -Math.pow(2, sigFmt.word - 1), hiV = Math.pow(2, sigFmt.word - 1) - 1, hs = Math.pow(2, -headroomBits);
+  let cur = Array.from(x, v => toInt(v * hs, sigFmt, 'nearest')); const xq = cur.map(v => v * sigFmt.lsb);
   let ref = Array.from(xq); // float cascade with quantized coefficients and quantized input
-  let idealRef = Array.from(x);
+  let idealRef = Array.from(x, v => v * hs);
   for (const s of sos) {
     const [b0, b1, b2, a1, a2] = [0, 1, 2, 4, 5].map(i => toInt(s[i], coefFmt, rounding)); const cf = [0, 1, 2, 4, 5].map(i => quantize(s[i], coefFmt, rounding));
-    let x1 = 0, x2 = 0, y1 = 0, y2 = 0; const out = new Array(cur.length);
-    for (let i = 0; i < cur.length; i++) { const v = cur[i]; const acc = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2; const y = Math.min(hiV, Math.max(lo, Math.floor(acc / den + 0.5))); x2 = x1; x1 = v; y2 = y1; y1 = y; out[i] = y; }
+    const c1 = errorFeedback ? Math.floor(a1 / den + 0.5) : 0, c2 = errorFeedback ? Math.floor(a2 / den + 0.5) : 0;
+    let x1 = 0, x2 = 0, y1 = 0, y2 = 0, r1 = 0, r2 = 0; const out = new Array(cur.length);
+    for (let i = 0; i < cur.length; i++) {
+      const v = cur[i], acc = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2 - c1 * r1 - c2 * r2;
+      const yr = Math.floor(acc / den + 0.5), y = limit(yr, lo, hiV, overflow);
+      if (errorFeedback) { r2 = r1; r1 = acc - yr * den; }
+      x2 = x1; x1 = v; y2 = y1; y1 = y; out[i] = y;
+    }
     cur = out;
     ref = lfilter(cf[0], cf[1], cf[2], cf[3], cf[4], ref);
     idealRef = lfilter(s[0], s[1], s[2], s[4], s[5], idealRef);
@@ -416,7 +494,7 @@ function lfilter(b0, b1, b2, a1, a2, x) { let x1 = 0, x2 = 0, y1 = 0, y2 = 0; re
 const variance = (a, b, skip = 0) => { let s = 0, n = 0; for (let i = skip; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; n++; } return s / n; };
 const power = (a, skip = 0) => { let s = 0, n = 0; for (let i = skip; i < a.length; i++) { s += a[i] * a[i]; n++; } return s / n; };
 
-function firNoiseTheory(h, sigFmt, inputQuantized = false) { const d2 = sigFmt.lsb * sigFmt.lsb / 12; let e = 0; for (const v of h) e += v * v; return d2 * (1 + (inputQuantized ? e : 0)); }
+function firNoiseTheory(h, sigFmt, inputQuantized = true) { const d2 = sigFmt.lsb * sigFmt.lsb / 12; let e = 0; for (const v of h) e += v * v; return d2 * (1 + (inputQuantized ? e : 0)); }
 function chainEnergy(num, den, n = 1 << 14) {
   let s = 0;
   for (let i = 0; i < n; i++) {
@@ -427,9 +505,13 @@ function chainEnergy(num, den, n = 1 << 14) {
   }
   return s / n;
 }
-function sosNoiseTheory(sos, sigFmt) {
-  const d2 = sigFmt.lsb * sigFmt.lsb / 12; let total = 0;
-  for (let k = 0; k < sos.length; k++) { const rest = sos.slice(k + 1); total += d2 * chainEnergy(rest.map(s => s.slice(0, 3)), [sos[k].slice(3)].concat(rest.map(s => s.slice(3)))); }
+function sosNoiseTheory(sos, sigFmt, inputQuantized = true, { errorFeedback = false } = {}) {
+  const d2 = sigFmt.lsb * sigFmt.lsb / 12;
+  let total = inputQuantized ? d2 * chainEnergy(sos.map(s => s.slice(0, 3)), sos.map(s => s.slice(3))) : 0;
+  for (let k = 0; k < sos.length; k++) {
+    const rest = sos.slice(k + 1), own = errorFeedback ? [[1, Math.floor(sos[k][4] + 0.5), Math.floor(sos[k][5] + 0.5)]] : [];
+    total += d2 * chainEnergy(own.concat(rest.map(s => s.slice(0, 3))), [sos[k].slice(3)].concat(rest.map(s => s.slice(3))));
+  }
   return total;
 }
 

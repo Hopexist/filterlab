@@ -4,7 +4,7 @@ const { launch, fileUrl } = require('./browser');
 const path = require('path');
 const SHOTS = path.resolve(__dirname, '..', 'shots');
 
-const METHODS = ['remez', 'window', 'butter', 'cheby1', 'cheby2'];
+const METHODS = ['remez', 'window', 'butter', 'cheby1', 'cheby2', 'ellip'];
 const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
 
 (async () => {
@@ -50,6 +50,17 @@ const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
     if (!(after.e[1] > before[1])) problems.push('dragging the stopband edge did not move it');
     if (Math.abs(+after.input - after.e[1]) > 1) problems.push('edge input box does not match the dragged edge');
     await p.screenshot(path.join(SHOTS, 'after-drag.png'));
+
+    // error feedback on a narrow low-pass must lower the measured noise and stay close to theory; wrap mode must render
+    await p.evaluate(() => { const s = window.__filterlab.state; Object.assign(s, { method: 'butter', btype: 'lowpass', edges: [80, 160], rp: 1, rs: 40, orderMode: 'auto' }); Object.assign(s.q, { struct: 'sos', coef: 20, sig: 16, ef: false, headroom: 0, overflow: 'saturate' }); });
+    await p.click('[data-tab=response]'); await p.click('[data-tab=quant]'); await p.wait(400);
+    const noiseRow = () => p.evaluate(() => { const r = [...document.querySelectorAll('.score .row')].find(x => x.querySelector('.lab')?.textContent === 'Round-off noise'); return r ? { db: parseFloat(r.querySelector('.val').textContent), ok: r.querySelector('.ic').classList.contains('ok') } : null; });
+    const off = await noiseRow(); await p.click('#qEF'); await p.wait(400); const on = await noiseRow();
+    console.log('error feedback: noise', off && off.db, 'dB ->', on && on.db, 'dB; theory agreement', on && on.ok);
+    if (!off || !on || !(off.db - on.db >= 6)) problems.push('error feedback did not lower the measured noise by 6 dB in the app');
+    if (on && !on.ok) problems.push('error-feedback noise is more than 3 dB from theory in the app');
+    await p.evaluate(() => { document.getElementById('qOver').value = 'wrap'; document.getElementById('qOver').dispatchEvent(new Event('change')); });
+    await p.wait(300); await p.screenshot(path.join(SHOTS, 'quant-ef-wrap.png'));
   } catch (e) {
     problems.push('script error: ' + e.message);
   } finally {

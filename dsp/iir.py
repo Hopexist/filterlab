@@ -1,4 +1,4 @@
-"""IIR design: analog prototypes (Butterworth, Chebyshev I/II) -> band transform -> bilinear."""
+"""IIR design: analog prototypes (Butterworth, Chebyshev I/II, elliptic) -> band transform -> bilinear."""
 import numpy as np
 from math import pi, ceil
 
@@ -22,6 +22,70 @@ def _cheb2ap(N, rs):
     p = np.sinh(mu) * p.real + 1j * np.cosh(mu) * p.imag
     p = 1 / p
     return z, p, (np.prod(-p) / np.prod(-z)).real
+
+# ---- elliptic: complete integrals and Jacobi functions by the AGM (Abramowitz & Stegun 17.6, 16.4) ----
+def _agm(a, b):
+    for _ in range(64):
+        if abs(a - b) <= 1e-16 * a: break
+        a, b = (a + b) / 2, np.sqrt(a * b)
+    return a
+def _ellipk(m):   return pi / (2 * _agm(1.0, np.sqrt(1 - m)))   # K(m), parameter m = k^2
+def _ellipkm1(p): return pi / (2 * _agm(1.0, np.sqrt(p)))       # K(1 - p), accurate for tiny p
+
+def _ellipj(u, m):
+    """sn, cn, dn of real u (array) for parameter 0 <= m < 1, by descending AGM."""
+    u = np.asarray(u, float)
+    if m < 1e-12: return np.sin(u), np.cos(u), np.ones_like(u)
+    a, b, c = [1.0], np.sqrt(1 - m), [np.sqrt(m)]
+    while abs(c[-1]) > 1e-16 and len(a) < 64:
+        a_, b_ = a[-1], b
+        a.append((a_ + b_) / 2); c.append((a_ - b_) / 2); b = np.sqrt(a_ * b_)
+    n = len(a) - 1
+    phi = 2.0 ** n * a[-1] * u
+    for i in range(n, 0, -1):
+        prev = phi; phi = (phi + np.arcsin(c[i] / a[i] * np.sin(phi))) / 2
+    return np.sin(phi), np.cos(phi), np.cos(phi) / np.cos(prev - phi)
+
+def _ellipdeg(n, m1):
+    """Degree equation: the modulus m with K'(m)/K(m) = n K'(m1)/K(m1), via nomes (Orfanidis)."""
+    q = np.exp(-pi * _ellipkm1(m1) / _ellipk(m1)) ** (1.0 / n)
+    j = np.arange(8)
+    num = np.sum(q ** (j * (j + 1))); den = 1 + 2 * np.sum(q ** ((j + 1) ** 2))
+    return 16 * q * (num / den) ** 4
+
+def _arc_jac_sc1(w, m):
+    """Real v with sc(v, 1 - m) = w, i.e. Im of the inverse sn(j w, m), by descending Landen."""
+    comp = lambda x: np.sqrt((1 - x) * (1 + x))
+    ks = [np.sqrt(m)]
+    while ks[-1] != 0 and len(ks) < 20:
+        kp = comp(ks[-1]); ks.append((1 - kp) / (1 + kp))
+    K = np.prod(1 + np.array(ks[1:])) * pi / 2
+    wn = 1j * w
+    for kn, kx in zip(ks[:-1], ks[1:]):
+        wn = 2 * wn / ((1 + kx) * (1 + np.sqrt(1 - (kn * wn) ** 2)))
+    return (K * 2 / pi * np.arcsin(wn)).imag
+
+def _ellipap(N, rp, rs):
+    eps2 = 10 ** (rp / 10) - 1
+    if N == 1:
+        p = -np.sqrt(1 / eps2); return np.array([]), np.array([p + 0j]), -p
+    m1 = eps2 / (10 ** (rs / 10) - 1)
+    m = _ellipdeg(N, m1); K = _ellipk(m)
+    j = np.arange(1 - N % 2, N, 2)
+    s, c, d = _ellipj(j * K / N, m)
+    sz = s[np.abs(s) > 1e-14]
+    z = 1j / (np.sqrt(m) * sz); z = np.concatenate([z, np.conj(z)])
+    v0 = K * _arc_jac_sc1(1 / np.sqrt(eps2), m1) / (N * _ellipk(m1))
+    sv, cv, dv = _ellipj(v0, 1 - m)
+    p = -(c * d * sv * cv + 1j * s * dv) / (1 - (d * sv) ** 2)
+    if N % 2:
+        newp = p[np.abs(p.imag) > 1e-14 * np.sqrt(np.sum(np.abs(p) ** 2))]
+        p = np.concatenate([p, np.conj(newp)])
+    else:
+        p = np.concatenate([p, np.conj(p)])
+    k = (np.prod(-p) / np.prod(-z)).real
+    if N % 2 == 0: k /= np.sqrt(1 + eps2)
+    return z, p, k
 
 def _deg(z, p): return len(p) - len(z)
 
@@ -54,13 +118,13 @@ def _bilinear(z, p, k, fs):
 def _prewarp(f, fs): return 2 * fs * np.tan(pi * np.asarray(f, float) / fs)
 
 def design_iir(kind, btype, order, edges, fs=2.0, rp=1.0, rs=40.0, butter_edge_rp=None):
-    """kind: butter|cheby1|cheby2. btype: lowpass|highpass|bandpass|bandstop.
+    """kind: butter|cheby1|cheby2|ellip. btype: lowpass|highpass|bandpass|bandstop.
     edges: cutoff (lp/hp) or [low, high] (bp/bs) in Hz. For cheby1 the edge is the
-    end of the ripple band; for cheby2 it is the start of the stopband.
+    end of the ripple band (also for ellip); for cheby2 it is the start of the stopband.
     butter_edge_rp: for Butterworth, put -butter_edge_rp dB at the edge(s) instead of -3 dB.
     Returns dict(z, p, k, sos, b, a)."""
     z, p, k = {"butter": lambda: _buttap(order), "cheby1": lambda: _cheb1ap(order, rp),
-               "cheby2": lambda: _cheb2ap(order, rs)}[kind]()
+               "cheby2": lambda: _cheb2ap(order, rs), "ellip": lambda: _ellipap(order, rp, rs)}[kind]()
     if kind == "butter" and butter_edge_rp is not None:
         # scale the prototype so the response is exactly -butter_edge_rp dB at the (passband) edge(s)
         z, p, k = _lp2lp((z, p, k), (10 ** (butter_edge_rp / 10) - 1) ** (-1 / (2 * order)))
@@ -87,6 +151,9 @@ def min_order(kind, btype, passband, stopband, gpass_db, gstop_db, fs=2.0):
     gp, gs = 10 ** (gpass_db / 10) - 1, 10 ** (gstop_db / 10) - 1
     if kind == "butter":
         n = np.log10(gs / gp) / (2 * np.log10(nat))
+    elif kind == "ellip":   # degree equation: n = K(k^2) K'(k1^2) / (K'(k^2) K(k1^2)), k = 1/nat, k1^2 = gp/gs
+        m, m1 = 1 / nat ** 2, gp / gs
+        n = _ellipk(m) * _ellipkm1(m1) / (_ellipkm1(m) * _ellipk(m1))
     else:
         n = np.arccosh(np.sqrt(gs / gp)) / np.arccosh(nat)
     return int(ceil(n - 1e-12))

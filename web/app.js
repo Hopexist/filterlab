@@ -14,6 +14,7 @@ const METHODS = {
   butter: { name: 'Butterworth', note: 'IIR, flat passband, gentle roll-off', kind: 'iir' },
   cheby1: { name: 'Chebyshev I', note: 'IIR, ripple in the passband', kind: 'iir' },
   cheby2: { name: 'Chebyshev II', note: 'IIR, ripple in the stopband', kind: 'iir' },
+  ellip: { name: 'Elliptic', note: 'IIR, ripple in both bands, steepest roll-off', kind: 'iir' },
 };
 const BTYPES = { lowpass: 'Low-pass', highpass: 'High-pass', bandpass: 'Band-pass', bandstop: 'Band-stop' };
 const LABELS = {
@@ -30,7 +31,7 @@ const defaultEdges = (bt, fs) => ({ lowpass: [0.125, 0.1875], highpass: [0.125, 
 const state = {
   method: 'remez', btype: 'lowpass', fs: 8000, edges: defaultEdges('lowpass', 8000), rp: 1, rs: 60, win: 'kaiser',
   orderMode: 'auto', order: 41, tab: 'response', zoom: 'full', phase: 'phase',
-  q: { coef: 12, sig: 16, round: 'nearest', struct: 'sos' },
+  q: { coef: 12, sig: 16, round: 'nearest', struct: 'sos', overflow: 'saturate', headroom: 0, ef: false },
 };
 let drawn = false, current = null, focusKey = null, renderQueued = false, fastMode = false;
 
@@ -75,12 +76,18 @@ function buildDesign(st, fast) {
     const ok = m => m.ripple <= st.rp * 1.0005 + 1e-6 && m.atten >= st.rs - 0.01;
     let est = Math.ceil((-10 * Math.log10(dp * ds) - 13) / (14.6 * df)) + 1; est = clamp(est | 1, 7, 801);
     let n, res;
-    if (st.orderMode === 'manual') { n = clamp(st.order | 1, 5, 801); res = run(n); }
+    const evenOk = st.btype === 'lowpass' || st.btype === 'bandpass';   // type II has a forced zero at fs/2
+    if (st.orderMode === 'manual') {
+      n = clamp(Math.round(st.order), 4, 801);
+      if (n % 2 === 0 && !evenOk) { n += 1; notes.push(`An even-length linear-phase FIR always has zero gain at fs/2, so a ${BTYPES[st.btype].toLowerCase()} needs an odd length. Using ${n} taps.`); }
+      res = run(n);
+    }
     else if (fast) { n = est; res = run(n); }
     else {
       n = est; res = run(n);
       if (ok(res.m)) { for (let i = 0; i < 12 && n > 7; i++) { const t = run(n - 2); if (ok(t.m)) { n -= 2; res = t; } else break; } }
       else { for (let i = 0; i < 70 && n < 801; i++) { n += 2; res = run(n); if (ok(res.m)) break; } if (!ok(res.m)) notes.push('No filter up to 801 taps meets this spec. Widen the transition band or relax the targets.'); }
+      if (evenOk && ok(res.m)) { const t = run(n - 1); if (ok(t.m)) { n -= 1; res = t; } }   // one tap fewer as type II, if it still meets spec
     }
     Object.assign(out, { h: Array.from(res.r.h), taps: n, resp: res.resp, title: `Equiripple FIR, ${n} taps`, size: `${n} taps` });
   } else if (st.method === 'window') {
@@ -328,7 +335,7 @@ function quantAnalysis(d, st) {
     const qf = D.quantizeFir(d.h, q.coef, q.round), resp = respOf(qf.hq, null);
     Object.assign(out, { fmt: qf.fmt, maxErr: qf.maxErr, resp, m: D.measure(resp, d.bands), zeros: D.polyRoots(qf.hq), poles: [], poleOrigin: d.h.length - 1, stable: true });
     if (qf.fmt.fracBits >= 0) {
-      const sim = D.firFixedSim(d.h, x, qf.fmt, sigFmt, q.round), skip = d.h.length;
+      const sim = D.firFixedSim(d.h, x, qf.fmt, sigFmt, q.round, { overflow: q.overflow }), skip = d.h.length;
       out.noise = D.variance(sim.y, sim.yq, skip); out.theory = D.firNoiseTheory(d.h, sigFmt, false);
       out.sqnr = 10 * Math.log10(D.power(sim.yIdeal, skip) / D.variance(sim.y, sim.yIdeal, skip));
     }
@@ -341,8 +348,9 @@ function quantAnalysis(d, st) {
     out.direct = { fmt: qd.fmt, maxErr: qd.maxErr, resp: D.freqz(qd.bq, qd.aq, 2048, st.fs, qd.gain), zeros: D.polyRoots(qd.bq), poles: qd.poles, stable: qd.stable, maxR: qd.maxRadius };
     const act = q.struct === 'sos' ? out.sos : out.direct; Object.assign(out, { fmt: act.fmt, maxErr: act.maxErr, resp: act.resp, zeros: act.zeros, poles: act.poles, stable: act.stable, m: D.measure(act.resp, d.bands), maxR: act.maxR, poleOrigin: 0 });
     if (out.sos.stable && qs.fmt.fracBits >= 0) {
-      const sim = D.sosFixedSim(qs.scaled, x, qs.fmt, sigFmt, q.round), skip = 600; out.sosSim = true;
-      out.noise = D.variance(sim.y, sim.yq, skip); out.theory = D.sosNoiseTheory(qs.sq, sigFmt);
+      const sim = D.sosFixedSim(qs.scaled, x, qs.fmt, sigFmt, q.round, { overflow: q.overflow, headroomBits: q.headroom, errorFeedback: q.ef }), skip = 600; out.sosSim = true;
+      const up = Math.pow(4, q.headroom);   // noise referred back to the output scale (the output is multiplied by 2^h)
+      out.noise = D.variance(sim.y, sim.yq, skip) * up; out.theory = D.sosNoiseTheory(qs.sq, sigFmt, false, { errorFeedback: q.ef }) * up;
       out.sqnr = 10 * Math.log10(D.power(sim.yIdeal, skip) / D.variance(sim.y, sim.yIdeal, skip));
     }
     out.sweep = [
@@ -366,7 +374,10 @@ function renderQuant(d) {
       ${sliderBlock('qCoef', 'Coefficient word length', 4, 24, q.coef, `${q.coef} bits <small class="unit">${fmtS(qa.fmt)}</small>`)}
       ${sliderBlock('qSig', 'Signal word length', 8, 20, q.sig, `${q.sig} bits <small class="unit">Q0.${q.sig - 1}</small>`)}
       <div><div class="field" style="grid-template-columns:1fr 130px;margin-top:0"><label for="qRound">Coefficient rounding</label><select id="qRound"><option value="nearest">Nearest</option><option value="floor">Floor (truncate)</option></select></div>
-      ${iir ? `<div class="field" style="grid-template-columns:1fr 130px"><label for="qStruct">Structure</label><select id="qStruct"><option value="sos">Biquad cascade</option><option value="direct">Single direct form</option></select></div>` : ''}</div></div></div>
+      ${iir ? `<div class="field" style="grid-template-columns:1fr 130px"><label for="qStruct">Structure</label><select id="qStruct"><option value="sos">Biquad cascade</option><option value="direct">Single direct form</option></select></div>` : ''}
+      <div class="field" style="grid-template-columns:1fr 130px"><label for="qOver">On overflow</label><select id="qOver"><option value="saturate">Saturate</option><option value="wrap">Wrap around</option></select></div></div>
+      ${iir ? `<div>${sliderBlock('qHead', 'Input headroom', 0, 6, q.headroom, `${q.headroom} bit${q.headroom === 1 ? '' : 's'} <small class="unit">${q.headroom ? '−' + fmtN(6.02 * q.headroom, 1) + ' dB SNR' : 'none'}</small>`)}
+      <label class="check"><input type="checkbox" id="qEF"${q.ef ? ' checked' : ''}> Error feedback <small class="unit">feeds each rounding error back through round(a₁), round(a₂)</small></label></div>` : ''}</div></div>
     <div class="grid2"><div class="col">
       <div class="panel card"><div class="card-head"><h2>Response, before and after rounding</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)' }, { label: `Quantized, ${q.coef}-bit coefficients`, color: 'var(--s2)' }])}<div class="chart" id="qMag"></div>${unstableMsg}</div>
       <div class="panel card"><div class="card-head"><h2>Stopband attenuation against word length</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)', dash: true }, ...qa.sweep.map(s => ({ label: s.name, color: s.color, dash: s.dash }))])}<div class="chart" id="qSweep"></div><p class="hint">${sweepNote} Marker on the chart is your current setting.</p><div id="qSweepT"></div></div></div>
@@ -376,6 +387,8 @@ function renderQuant(d) {
   const upd = () => renderQuant(current);
   $('#qCoef').oninput = e => { q.coef = +e.target.value; upd(); focusRestore('qCoef'); }; $('#qSig').oninput = e => { q.sig = +e.target.value; upd(); focusRestore('qSig'); };
   $('#qRound').onchange = e => { q.round = e.target.value; upd(); }; if (iir) $('#qStruct').onchange = e => { q.struct = e.target.value; upd(); };
+  $('#qOver').value = q.overflow; $('#qOver').onchange = e => { q.overflow = e.target.value; upd(); };
+  if (iir) { $('#qHead').oninput = e => { q.headroom = +e.target.value; upd(); focusRestore('qHead'); }; $('#qEF').onchange = e => { q.ef = e.target.checked; upd(); focusRestore('qEF'); }; }
   const fr = Array.from(d.resp.f), y = Array.from(qa.resp.db);
   lineChart($('#qMag'), { label: 'Magnitude before and after quantization', height: 290, xd: [0, nyq], yd: yDomain(st), yLabel: 'Gain (dB)', xLabel: 'Frequency (Hz)', shades: magShades(st, d), series: [{ x: fr, y: Array.from(d.resp.db) }, { x: fr, y }],
     tip: i => `<b>${fmtN(d.resp.f[i], 1)} Hz</b><br><span class="sw" style="background:var(--s1)"></span>${fmtN(d.resp.db[i], 2)} dB<br><span class="sw" style="background:var(--s2)"></span>${fmtN(y[i], 2)} dB` });
@@ -398,7 +411,7 @@ function quantScore(d, qa) {
   h += row(qa.maxErr <= lsb / 2 + 1e-15, 'Largest coefficient error', qa.maxErr.toExponential(1), `Rounding limit is half a step, ${(lsb / 2).toExponential(1)}. Format ${qa.fmt.fracBits >= 0 ? 'Q' + qa.fmt.intBits + '.' + qa.fmt.fracBits : 'coarser than 1 (step ' + Math.pow(2, -qa.fmt.fracBits) + ')'}.`);
   if (qa.sqnr !== undefined && (d.kind === 'fir' || st.q.struct === 'sos')) {
     const gap = 10 * Math.log10(qa.noise / qa.theory);
-    h += row(Math.abs(gap) < 3, 'Round-off noise', fmtN(10 * Math.log10(qa.noise), 1) + ' dB', `Theory predicts ${fmtN(10 * Math.log10(qa.theory), 1)} dB (${gap >= 0 ? '+' : ''}${fmtN(gap, 1)} dB off). ${d.kind === 'iir' ? 'Inside the cascade, before the output gain. ' : ''}Relative to a 1.0 full scale.`);
+    h += row(Math.abs(gap) < 3, 'Round-off noise', fmtN(10 * Math.log10(qa.noise), 1) + ' dB', `Theory predicts ${fmtN(10 * Math.log10(qa.theory), 1)} dB (${gap >= 0 ? '+' : ''}${fmtN(gap, 1)} dB off). ${d.kind === 'iir' ? `Inside the cascade, before the output gain${st.q.headroom ? `, scaled back by 2^${st.q.headroom}` : ''}${st.q.ef ? ', with error feedback' : ''}. ` : ''}Relative to a 1.0 full scale.${Math.abs(gap) >= 3 && st.q.overflow === 'wrap' ? ' Large gaps with wrap-around usually mean the signal overflowed.' : ''}`);
     h += row(true, 'Signal-to-noise ratio', fmtN(qa.sqnr, 1) + ' dB', `Fixed-point output against the ideal floating-point filter, so coefficient rounding counts too. ${st.q.sig}-bit signal.`);
   } else if (d.kind === 'iir' && st.q.struct === 'direct') h += '<div class="banner info">Round-off noise is simulated for the biquad cascade only. Direct form is shown for its coefficient sensitivity: switch Structure to see the noise figures.</div>';
   else if (!qa.stable) h += '<div class="banner info">Noise simulation skipped because the quantized filter is unstable.</div>';

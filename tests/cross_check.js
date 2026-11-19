@@ -50,13 +50,26 @@ const sc = D.scaleSos(q.sos2); close('scale_sos sections', sc.sos, q.scaled);
 const t8 = D.designIIR('butter', 'lowpass', 8, [0.03], 1.0, 1, 40), dq = D.quantizeDirect(t8.b, t8.a, 14);
 close('direct-form quantized b', dq.bq, q.dq_bq); close('direct-form quantized a', dq.aq, q.dq_aq);
 close('direct-form stability flag', +dq.stable, +q.dq_stable, EXACT);
-close('fir noise theory', D.firNoiseTheory(q.fir_h, D.qFormat(0, 13)), q.theory_fir);
+close('fir noise theory', D.firNoiseTheory(q.fir_h, D.qFormat(0, 13), false), q.theory_fir);
 // Python integrates |H|^2 on a 2^15 grid with scipy; JS uses its own grid: agreement to 1e-3 relative is the honest bound
-close('sos noise theory', D.sosNoiseTheory(q.sos, D.qFormat(0, 15)), q.theory_sos, { rtol: 1e-3, atol: 0 });
+close('sos noise theory', D.sosNoiseTheory(q.sos, D.qFormat(0, 15), false), q.theory_sos, { rtol: 1e-3, atol: 0 });
 // root finder: P(z)=sum h_k z^(n-k) must vanish at every returned root (incl. a degenerate end-coefficient design)
 for (const idx of [0, 1]) {
   const h = ref.remez[idx].h, zr = D.polyRoots(h), n = h.length - 1; let worst = 0;
   for (const z of zr) { let re = 0, im = 0; for (let k = 0; k <= n; k++) { const nr = re * z.re - im * z.im + h[k]; im = re * z.im + im * z.re; re = nr; } let s = 0; for (let k = 0; k <= n; k++) s += Math.abs(h[k]) * Math.pow(Math.max(Math.hypot(z.re, z.im), 1), n - k); worst = Math.max(worst, Math.hypot(re, im) / s); }
   close(`polyRoots residual (${h.length} taps)`, worst, 0, { rtol: 0, atol: 1e-9 });
 }
+// ---- task B ----
+for (const r of ref.remez_b) close(`remez ${r.kind} N=${r.N}`, D.remez(r.N, r.bands, r.des, r.w, 1.0, { kind: r.kind }).h, r.h);
+for (const r of ref.min_order) close(`min_order ${r.kind} ${r.bt} ${r.gp}/${r.gs} dB`, D.minOrder(r.kind, r.bt, r.wp, r.ws, r.gp, r.gs, 1.0), r.n, EXACT);
+const b = ref.quant_b, s2 = D.qFormat(0, 15), fe = D.qFormat(...b.fe), fw = D.qFormat(...b.fw);
+close('sos sim, error feedback', D.sosFixedSim(b.sqe, b.xe, fe, s2, 'nearest', { errorFeedback: true }).y, b.y_ef);
+close('sos sim, wrap', D.sosFixedSim(b.sosw, b.xw, fw, s2, 'nearest', { overflow: 'wrap' }).y, b.y_wrap);
+close('sos sim, 2 headroom bits', D.sosFixedSim(b.sosw, b.xw, fw, s2, 'nearest', { headroomBits: 2 }).y, b.y_head);
+close('sos sim, wrap + headroom + EF', D.sosFixedSim(b.sqe, b.xe, fe, s2, 'nearest', { overflow: 'wrap', headroomBits: 1, errorFeedback: true }).y, b.y_head_ef_wrap);
+close('fir sim, wrap', D.firFixedSim(Array(8).fill(0.24), Array(40).fill(0.9), s2, s2, 'nearest', { overflow: 'wrap' }).y, b.fir_wrap);
+close('toInt wrap', [1.5, -1.25, 0.99, 3.2].map(v => D.toInt(v, D.qFormat(0, 7), 'nearest', 'wrap')), b.toint_wrap, EXACT);
+close('sos noise theory, input quantized', D.sosNoiseTheory(q.sos, s2), b.th_sos_inq, { rtol: 1e-3, atol: 0 });
+close('sos noise theory, error feedback', D.sosNoiseTheory(b.sqe, s2, false, { errorFeedback: true }), b.th_sos_ef, { rtol: 1e-3, atol: 0 });
+close('fir noise theory, input quantized', D.firNoiseTheory(q.fir_h, D.qFormat(0, 13)), b.th_fir_inq);
 console.log(fails ? `\n${fails} of ${count} FAILED` : `\nall ${count} cross-checks passed`); process.exit(fails ? 1 : 0);

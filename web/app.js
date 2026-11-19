@@ -137,6 +137,7 @@ function niceTicks(lo, hi, target) {
   return t;
 }
 const fmtHz = f => Math.abs(f) >= 1000 ? (f / 1000).toFixed(Math.abs(f) % 1000 === 0 ? 0 : 2).replace(/0$/, '') + 'k' : String(Math.round(f * 10) / 10);
+const unitSplit = t => { const m = /^(-?[\d.]+(?:e[-+]?\d+)?) (.+)$/i.exec(String(t)); return m ? `${m[1]} <span class="u">${m[2]}</span>` : /^-?[\d.]/.test(String(t)) ? String(t) : `<span class="txt">${t}</span>`; };   // display only: '0.826 dB' -> big number, small unit
 const fmtN = (v, d = 2) => Number.isFinite(v) ? (Math.round(v * Math.pow(10, d)) / Math.pow(10, d)).toString() : '—';
 let uid = 0;
 const SERIES_COLORS = ['var(--s1)', 'var(--s2)', 'var(--ink-3)'];
@@ -148,6 +149,9 @@ function lineChart(el, cfg) {
   const sx = x => m.l + (x - x0) / (x1 - x0) * iw, sy = y => m.t + (1 - (y - y0) / (y1 - y0)) * ih, id = 'c' + (++uid);
   const xt = cfg.xticks || niceTicks(x0, x1, Math.max(3, Math.floor(iw / 80))), yt = niceTicks(y0, y1, Math.max(3, Math.floor(ih / 44)));
   let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(cfg.label)}"><defs><clipPath id="${id}"><rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}"/></clipPath></defs>`;
+  const mid = t => t.slice(1).map((v, i) => (v + t[i]) / 2);   // minor graticule halfway between major ticks
+  s += `<rect class="screen" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}"/>`;
+  s += '<g class="grid minor">' + mid(yt).map(v => `<line x1="${m.l}" x2="${W - m.r}" y1="${sy(v)}" y2="${sy(v)}"/>`).join('') + mid(xt).map(v => `<line y1="${m.t}" y2="${H - m.b}" x1="${sx(v)}" x2="${sx(v)}"/>`).join('') + '</g>';
   s += '<g class="grid">' + yt.map(v => `<line x1="${m.l}" x2="${W - m.r}" y1="${sy(v)}" y2="${sy(v)}"/>`).join('') + xt.map(v => `<line y1="${m.t}" y2="${H - m.b}" x1="${sx(v)}" x2="${sx(v)}"/>`).join('') + '</g>';
   s += `<g clip-path="url(#${id})">`;
   for (const sh of cfg.shades || []) { const ya = sy(clamp(sh.y0, y0, y1)), yb = sy(clamp(sh.y1, y0, y1)); s += `<rect class="shade" x="${sx(sh.x0)}" y="${Math.min(ya, yb)}" width="${Math.max(sx(sh.x1) - sx(sh.x0), 0)}" height="${Math.abs(yb - ya)}"/><line class="shade-edge" x1="${sx(sh.x0)}" x2="${sx(sh.x1)}" y1="${sy(sh.edge)}" y2="${sy(sh.edge)}"/>`; }
@@ -160,7 +164,7 @@ function lineChart(el, cfg) {
     } else {
       let d = '', pen = false;
       for (let i = 0; i < se.x.length; i++) { const yv = se.y[i]; if (!Number.isFinite(yv)) { pen = false; continue; } d += (pen ? 'L' : 'M') + sx(se.x[i]).toFixed(1) + ' ' + sy(yv).toFixed(1); pen = true; }
-      s += `<path class="trace${se.draw && !drawn ? ' draw' : ''}" d="${d}" stroke="${col}" ${se.dash ? 'stroke-dasharray="6 4"' : ''}/>`;
+      s += `<path class="trace${se.draw && !drawn ? ' draw' : ''}" d="${d}" stroke="${col}" ${se.dash ? 'stroke-dasharray="6 4"' : ''}${se.w ? ` style="stroke-width:${se.w}"` : ''}/>`;
     }
   });
   s += '</g>';
@@ -213,7 +217,7 @@ function pzChart(el, cfg) {
   const Wd = Math.min(Math.max(el.clientWidth || 300, 220), 420), H = Wd;
   let R = 1.4; for (const z of [...cfg.zeros, ...cfg.poles, ...(cfg.qZeros || []), ...(cfg.qPoles || [])]) R = Math.max(R, Math.min(D.cabs(z) * 1.1, 6));
   R = R > 1.5 ? Math.ceil(R * 2) / 2 : 1.4; const c = Wd / 2, k = (Wd / 2 - 24) / R, X = x => c + x * k, Y = y => c - y * k;
-  let s = `<svg viewBox="0 0 ${Wd} ${H}" width="${Wd}" height="${H}" role="img" aria-label="Pole-zero plot"><g class="grid">`;
+  let s = `<svg viewBox="0 0 ${Wd} ${H}" width="${Wd}" height="${H}" role="img" aria-label="Pole-zero plot"><rect class="screen" x="0.5" y="0.5" width="${Wd - 1}" height="${H - 1}"/><rect class="frame" x="0.5" y="0.5" width="${Wd - 1}" height="${H - 1}"/><g class="grid">`;
   [0.5, 1.5].filter(r => r < R).forEach(r => { s += `<circle cx="${c}" cy="${c}" r="${r * k}" fill="none" stroke="var(--grid)"/>`; });
   s += `<line x1="${24}" x2="${Wd - 24}" y1="${c}" y2="${c}"/><line y1="${24}" y2="${H - 24}" x1="${c}" x2="${c}"/></g><circle cx="${c}" cy="${c}" r="${k}" fill="none" stroke="var(--ink-3)" stroke-width="1.5"/>`;
   s += `<text x="${X(1) + 4}" y="${c + 14}">1</text><text x="${X(-1) - 4}" y="${c + 14}" text-anchor="end">−1</text><text x="${c + 5}" y="${Y(1) - 4}">j</text><text x="${Wd - 8}" y="${c - 6}" text-anchor="end">Re</text><text x="${c + 6}" y="30">Im</text>`;
@@ -227,9 +231,9 @@ function pzChart(el, cfg) {
     const x = X(z.re), y = Y(z.im); marks.push({ x, y, z, n, type, ghost });
     const out = ghost && D.cabs(z) >= 1 && type === 'pole';
     if (out) s += `<circle cx="${x}" cy="${y}" r="10" fill="none" stroke="var(--bad)" stroke-width="2"/>`;
-    if (type === 'zero') s += `<circle cx="${x}" cy="${y}" r="${ghost ? 4 : 5}" fill="${ghost ? 'none' : 'var(--panel)'}" stroke="${col}" stroke-width="2"/>`;
+    if (type === 'zero') s += `<circle cx="${x}" cy="${y}" r="${ghost ? 4 : 5}" fill="${ghost ? 'none' : 'var(--screen)'}" stroke="${col}" stroke-width="2"/>`;
     else s += `<path d="M${x - 5} ${y - 5}L${x + 5} ${y + 5}M${x + 5} ${y - 5}L${x - 5} ${y + 5}" stroke="${col}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
-    if (n > 1) s += `<text x="${x + 8}" y="${y - 7}" style="fill:var(--ink);font-weight:600">${n}</text>`;
+    if (n > 1) s += `<text class="mult" x="${x + 10}" y="${y - 9}">${n}</text>`;
   });
   draw(groups(cfg.zeros, 0), 'zero', 'var(--s1)', false); draw(groups(cfg.poles, cfg.poleOrigin || 0), 'pole', 'var(--s1)', false);
   if (cfg.qZeros) { draw(groups(cfg.qZeros, 0), 'zero', 'var(--s2)', true); draw(groups(cfg.qPoles, cfg.qPoleOrigin || 0), 'pole', 'var(--s2)', true); }
@@ -246,7 +250,7 @@ function pzChart(el, cfg) {
   svg.addEventListener('pointerleave', () => { tip.hidden = true; });
 }
 
-const legend = items => `<div class="legend">${items.map(i => `<span><i class="${i.dash ? 'dash' : ''}" style="border-color:${i.color}"></i>${esc(i.label)}</span>`).join('')}</div>`;
+const legend = items => `<div class="legend">${items.map(i => `<span><i class="${i.dash ? 'dash' : ''}" style="border-color:${i.color}${i.w ? `;border-top-width:${Math.max(i.w, 2)}px` : ''}"></i>${esc(i.label)}</span>`).join('')}</div>`;
 function tableDetails(headers, rows, label = 'Show data table') {
   return `<details class="data"><summary>${label}</summary><div class="scroll"><table class="t"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`;
 }
@@ -277,12 +281,12 @@ function renderResponse(d) {
       <div class="chart" id="cMag" data-keepfocus="1"></div><div id="tMag"></div></div>
     <div class="panel card"><div class="card-head"><h2>${st.phase === 'phase' ? 'Phase' : 'Group delay'}</h2><div class="tools">${tools('phase', [['phase', 'Phase'], ['gd', 'Group delay']], st.phase)}</div></div>
       <div class="chart" id="cPh"></div></div></div>
-    <div class="col"><div class="panel card"><div class="card-head"><h2>Poles and zeros</h2></div><div class="legend"><span>○ Zero</span><span>× Pole</span></div><div class="chart" id="cPZ"></div><p class="hint">${d.kind === 'fir' ? `FIR: ${d.poleOrigin} poles sit at the origin, so it is always stable.` : 'All poles inside the unit circle means a stable filter.'}</p></div>
+    <div class="col"><div class="panel card"><div class="card-head"><h2>Poles and zeros</h2></div><div class="legend"><span><svg class="mk" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="var(--s1)" stroke-width="2"/></svg>Zero</span><span><svg class="mk" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3L11 11M11 3L3 11" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/></svg>Pole</span></div><div class="chart" id="cPZ"></div><p class="hint">${d.kind === 'fir' ? `FIR: ${d.poleOrigin} poles sit at the origin, so it is always stable.` : 'All poles inside the unit circle means a stable filter.'}</p></div>
     <div class="panel card"><div class="card-head"><h2>Spec check</h2></div>${scoreHtml(d)}</div></div></div>`;
   $$('[data-k]', v).forEach(b => b.addEventListener('click', () => { state[b.dataset.k] = b.dataset.v; renderResponse(current); }));
   $('#pinB').addEventListener('click', () => { pinB = pinB ? null : { title: d.title, f: Array.from(d.resp.f), db: Array.from(d.resp.db), fs: st.fs }; renderResponse(current); $('#pinB').focus(); });
   const nyq = st.fs / 2, r = d.resp, fr = Array.from(r.f), bSame = pinB && pinB.fs === st.fs;
-  const series = [{ x: fr, y: Array.from(r.db), draw: true }]; if (pinB) series.push({ x: pinB.f, y: pinB.db, color: 'var(--cmp)', dash: true });
+  const series = [{ x: fr, y: Array.from(r.db) }]; if (pinB) series.push({ x: pinB.f, y: pinB.db, color: 'var(--cmp)', dash: true });
   lineChart($('#cMag'), { label: pinB ? 'Magnitude response in decibels, current design A and pinned design B' : 'Magnitude response in decibels', height: 300, xd: [0, nyq], yd: yDomain(st), yLabel: 'Gain (dB)', xLabel: 'Frequency (Hz)', series,
     shades: magShades(st, d), handles: edgeHandles(st, d), onDrag: onEdgeDrag,
     tip: i => `<b>${fmtN(r.f[i], 1)} Hz</b><br>${pinB ? '<span class="sw" style="background:var(--s1)"></span>A ' : ''}${fmtN(r.db[i], 2)} dB` + (bSame ? `<br><span class="sw dash" style="background:var(--cmp)"></span>B ${fmtN(pinB.db[i], 2)} dB` : '') });
@@ -298,7 +302,7 @@ function renderResponse(d) {
 function padRange(a) { const f = a.filter(Number.isFinite); let lo = Math.min(...f), hi = Math.max(...f); if (hi - lo < 1e-9) { lo -= 1; hi += 1; } const p = (hi - lo) * 0.08; return [lo - p, hi + p]; }
 
 function scoreHtml(d) {
-  const st = state, row = (ok, lab, val, sub) => `<div class="row"><span class="ic ${ok ? 'ok' : 'no'}" aria-hidden="true">${ok ? '✓' : '✕'}</span><span class="lab">${lab}</span><span class="val num">${val}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
+  const st = state, row = (ok, lab, val, sub) => `<div class="row"><span class="ic ${ok ? 'ok' : 'no'}" aria-hidden="true">${ok ? '✓' : '✕'}</span><span class="lab">${lab}</span><span class="val num">${unitSplit(val)}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
   const gdPass = (() => { const f = Array.from(d.gd.f), g = Array.from(d.gd.gd); let mn = Infinity, mx = -Infinity; d.bands.filter(b => b.type === 'pass').forEach(b => f.forEach((ff, i) => { if (ff >= b.lo && ff <= b.hi && Number.isFinite(g[i])) { mn = Math.min(mn, g[i]); mx = Math.max(mx, g[i]); } })); return [mn, mx]; })();
   const gdTxt = d.kind === 'fir' ? `Constant delay of ${fmtN((d.taps - 1) / 2, 1)} samples (${fmtN((d.taps - 1) / 2 / st.fs * 1000, 2)} ms): linear phase.` : `Delay varies ${fmtN(gdPass[0], 1)} to ${fmtN(gdPass[1], 1)} samples across the passband.`;
   return `<div class="score">
@@ -446,11 +450,11 @@ function renderSignal(d) {
         <div class="tools play"><button class="btn" data-play="x">Play input</button><button class="btn" data-play="f">Play floating point</button><button class="btn" data-play="q"${r.yQ ? '' : ' disabled'}>Play fixed point</button><button class="btn" id="stopA">Stop</button></div></div>
     </div></div>
     <div class="grid2"><div class="col">
-      <div class="panel card"><div class="card-head"><h2>Output spectrum</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)' }, { label: `Fixed point, ${st.q.coef}-bit coefficients, ${st.q.sig}-bit signal`, color: 'var(--s2)' }])}<div class="chart" id="sOut"></div>
+      <div class="panel card"><div class="card-head"><h2>Output spectrum</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)', w: 3.5 }, { w: 1.6, label: `Fixed point, ${st.q.coef}-bit coefficients, ${st.q.sig}-bit signal`, color: 'var(--s2)' }])}<div class="chart" id="sOut"></div>
         <p class="caption">The same input through your filter twice: once in floating point, once bit-true in fixed point with the Quantization tab's settings. Where the orange floor sits above the blue, you are seeing round-off noise and coefficient error. ${Number.isFinite(r.snr) ? `Fixed point against floating point: <b class="num">${fmtN(r.snr, 1)} dB</b> signal-to-noise.` : ''}</p><div id="sOutT"></div></div>
       <div class="panel card"><div class="card-head"><h2>Input spectrum</h2></div><div class="chart" id="sIn"></div><p class="caption">Averaged power spectrum (Welch, Hann window). A full-scale sine reads 0 dB.</p></div></div>
-    <div class="col"><div class="panel card"><div class="card-head"><h2>First samples</h2></div>${legend([{ label: 'Input', color: 'var(--ink-3)', dash: true }, { label: 'Floating point', color: 'var(--s1)' }, { label: 'Fixed point', color: 'var(--s2)' }])}<div class="chart" id="sTime"></div>
-      <p class="caption">The first ${Math.min(400, r.x.length)} samples. The filter delays and reshapes the input; the two outputs should lie on top of each other unless the arithmetic overflowed.</p></div></div></div>`;
+    <div class="col"><div class="panel card"><div class="card-head"><h2>First samples</h2></div>${legend([{ label: 'Input', color: 'var(--ink-3)', dash: true }, { label: 'Floating point', color: 'var(--s1)', w: 3.5 }, { w: 1.6, label: 'Fixed point', color: 'var(--s2)' }])}<div class="chart" id="sTime"></div>
+      <p class="caption">The first ${Math.min(120, r.x.length)} samples (the spectra use the whole run). The filter delays and reshapes the input; the two outputs should lie on top of each other unless the arithmetic overflowed.</p></div></div></div>`;
   $$('[data-src]', v).forEach(b => b.addEventListener('click', () => { sig.source = b.dataset.src; sig.error = ''; renderSignal(current); }));
   $('#wavIn').addEventListener('change', async e => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
@@ -469,14 +473,14 @@ function renderSignal(d) {
   const all = [r.sx, r.sF, r.sQ].filter(Boolean).flatMap(s => Array.from(s.db)), top = Math.ceil((Math.max(...all) + 6) / 10) * 10, yd = [top - 140, top];
   const fr = Array.from(r.sF.f), dbF = Array.from(r.sF.db), dbQ = r.sQ ? Array.from(r.sQ.db) : null;
   lineChart($('#sOut'), { label: 'Output power spectrum, floating point and fixed point', height: 280, xd: [0, nyq], yd, yLabel: 'Power (dB)', xLabel: 'Frequency (Hz)',
-    series: [{ x: fr, y: dbF }, ...(dbQ ? [{ x: fr, y: dbQ }] : [])], tip: i => `<b>${fmtN(fr[i], 1)} Hz</b><br><span class="sw" style="background:var(--s1)"></span>${fmtN(dbF[i], 1)} dB` + (dbQ ? `<br><span class="sw" style="background:var(--s2)"></span>${fmtN(dbQ[i], 1)} dB` : '') });
+    series: [{ x: fr, y: dbF, w: 3.5 }, ...(dbQ ? [{ x: fr, y: dbQ, w: 1.6 }] : [])], tip: i => `<b>${fmtN(fr[i], 1)} Hz</b><br><span class="sw" style="background:var(--s1)"></span>${fmtN(dbF[i], 1)} dB` + (dbQ ? `<br><span class="sw" style="background:var(--s2)"></span>${fmtN(dbQ[i], 1)} dB` : '') });
   const step = Math.max(1, Math.floor(fr.length / 32)), rows = []; for (let i = 0; i < fr.length; i += step) rows.push([fmtN(fr[i], 1), fmtN(dbF[i], 1), dbQ ? fmtN(dbQ[i], 1) : 'n/a']);
   $('#sOutT').innerHTML = tableDetails(['Frequency (Hz)', 'Floating point (dB)', 'Fixed point (dB)'], rows);
   const dbx = Array.from(r.sx.db);
   lineChart($('#sIn'), { label: 'Input power spectrum', height: 200, xd: [0, nyq], yd, yLabel: 'Power (dB)', xLabel: 'Frequency (Hz)', series: [{ x: fr, y: dbx, color: 'var(--ink-2)' }], tip: i => `<b>${fmtN(fr[i], 1)} Hz</b><br>${fmtN(dbx[i], 1)} dB` });
-  const n = Math.min(400, r.x.length), idx = Array.from({ length: n }, (_, i) => i), xi = Array.from(r.x.slice(0, n)), yf = Array.from(r.yF.slice(0, n)), yq = r.yQ ? Array.from(r.yQ.slice(0, n)) : null;
+  const n = Math.min(120, r.x.length), idx = Array.from({ length: n }, (_, i) => i), xi = Array.from(r.x.slice(0, n)), yf = Array.from(r.yF.slice(0, n)), yq = r.yQ ? Array.from(r.yQ.slice(0, n)) : null;
   lineChart($('#sTime'), { label: 'First samples of the input and both outputs', height: 280, xd: [0, n - 1], yd: padRange([...xi, ...yf, ...(yq || [])]), fx: v => Math.round(v), fy: v => fmtN(v, 2), xLabel: 'Sample n',
-    series: [{ x: idx, y: xi, color: 'var(--ink-3)', dash: true }, { x: idx, y: yf, color: 'var(--s1)' }, ...(yq ? [{ x: idx, y: yq, color: 'var(--s2)' }] : [])],   // input drawn first, underneath
+    series: [{ x: idx, y: xi, color: 'var(--ink-3)', dash: true }, { x: idx, y: yf, color: 'var(--s1)', w: 3.5 }, ...(yq ? [{ x: idx, y: yq, color: 'var(--s2)', w: 1.6 }] : [])],   // input drawn first, underneath
     tip: i => `<b>n = ${i}</b><br>Input ${fmtN(xi[i], 4)}<br><span class="sw" style="background:var(--s1)"></span>${fmtN(yf[i], 4)}` + (yq ? `<br><span class="sw" style="background:var(--s2)"></span>${fmtN(yq[i], 4)}` : '') });
 }
 /* ---------- hardware export (SystemVerilog, bit-exact with the fixed-point simulation) ---------- */
@@ -519,7 +523,7 @@ function rtlCard(d) {
     <div class="tools play"><button class="btn" id="rtlCopy">Copy SystemVerilog</button><button class="btn" id="rtlDl">Download ${r.name}.sv</button><button class="btn" id="rtlTb">Download testbench and vectors</button></div>
     <p class="caption">A synthesizable SystemVerilog module whose arithmetic matches this tab's fixed-point simulation bit for bit: ${q.coef}-bit coefficients, a ${q.sig}-bit signal, ${q.overflow === 'wrap' ? 'wrap-around' : 'saturating'} overflow${d.kind === 'iir' ? `, ${q.headroom} bit${q.headroom === 1 ? '' : 's'} of headroom${q.ef ? ', error feedback' : ''}` : ''}.</p>
     <p class="caption">It assumes one clock, a synchronous active-high reset (<code>rst</code>), and one new sample per clock when <code>in_valid</code> is high. <code>out_data</code> and <code>out_valid</code> arrive one clock later. There is no pipelining, so the whole multiply-add chain must fit in one clock period.${d.kind === 'iir' ? ` The output is the cascade output: multiply it by ${fmtN(r.gain, 4)} (the leftover scaling gain${q.headroom ? ' times 2^' + q.headroom : ''}) downstream.` : ''}</p>
-    <p class="caption">No standard HDL simulator was available where this was built. The test suite runs the generated text through Filterlab's own evaluators and compares them with the bit-true simulator, and <b>Simulate hardware</b> below does the same in your browser; run the testbench with Icarus Verilog to check it with a standard tool.</p>
+    <details class="data more"><summary>How this was checked</summary><p class="caption">No standard HDL simulator was available where this was built. The test suite runs the generated text through Filterlab's own evaluators and compares them with the bit-true simulator, and <b>Simulate hardware</b> below does the same in your browser; run the testbench with Icarus Verilog to check it with a standard tool.</p></details>
     <div id="rtlCost"></div>
     <details class="data"><summary>Show the module</summary><pre class="code" id="rtlText"></pre></details></div>`;
 }
@@ -628,7 +632,7 @@ function rtlSimCard(d) {
     <div class="wave" id="rsimWave" tabindex="0" role="group" aria-label="Waveform. Left and right arrow keys move the cursor one clock; Home and End jump to the ends." aria-describedby="rsimRead"></div>
     <div class="wave-read num" id="rsimRead"></div>
     <p class="caption">Simulated in your browser by Filterlab's interpreter of the generated SystemVerilog. Not run in a standard HDL simulator, not synthesized.</p>
-    <p class="caption">The interpreter parses the module text above and runs it one clock at a time with SystemVerilog's signed-arithmetic and width rules; the bit-true model is this tab's fixed-point simulation. Both the interpreter and the generator were written for Filterlab, so agreement here is weaker evidence than a third-party simulator. Running the downloaded testbench in Icarus Verilog or another standard simulator closes that gap.</p>
+    <details class="data more"><summary>How the simulation works</summary><p class="caption">The interpreter parses the module text above and runs it one clock at a time with SystemVerilog's signed-arithmetic and width rules; the bit-true model is this tab's fixed-point simulation. Both the interpreter and the generator were written for Filterlab, so agreement here is weaker evidence than a third-party simulator. Running the downloaded testbench in Icarus Verilog or another standard simulator closes that gap.</p></details>
     <div id="rsimTable"></div></div>`;
 }
 function wireRtlSim(d) {
@@ -667,13 +671,13 @@ function renderQuant(d) {
       ${iir ? `<div>${sliderBlock('qHead', 'Input headroom', 0, 6, q.headroom, `${q.headroom} bit${q.headroom === 1 ? '' : 's'} <small class="unit">${q.headroom ? '−' + fmtN(6.02 * q.headroom, 1) + ' dB SNR' : 'none'}</small>`)}
       <label class="check"><input type="checkbox" id="qEF"${q.ef ? ' checked' : ''}> Error feedback <small class="unit">feeds each rounding error back through round(a₁), round(a₂)</small></label></div>` : ''}</div></div>
     <div class="grid2"><div class="col">
-      <div class="panel card"><div class="card-head"><h2>Response, before and after rounding</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)' }, { label: `Quantized, ${q.coef}-bit coefficients`, color: 'var(--s2)' }])}<div class="chart" id="qMag"></div><p class="caption">Blue is the filter you designed. Orange is the same filter after every coefficient is rounded to ${q.coef} bits, which is what fixed-point hardware actually computes. Where orange crosses into the shaded area, rounding alone broke the spec.</p>${unstableMsg}</div>
-      <div class="panel card"><div class="card-head"><h2>Stopband attenuation against word length</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)', dash: true }, ...qa.sweep.map(s => ({ label: s.name, color: s.color, dash: s.dash }))])}<div class="chart" id="qSweep"></div><p class="caption">Each point rounds the same design to that many bits; nothing is redesigned. Fewer bits mean coarser steps and usually less stopband attenuation. ${sweepNote} The dotted marker is your current setting.</p><div id="qSweepT"></div></div></div>
-    <div class="col"><div class="panel card"><div class="card-head"><h2>Poles and zeros</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)' }, { label: 'Quantized', color: 'var(--s2)' }])}<div class="chart" id="qPZ"></div><p class="caption">Rounding moves poles and zeros. ${iir ? 'A pole that reaches the unit circle makes the filter ring forever or blow up; high-order direct form is far more sensitive than a cascade of biquads.' : 'An FIR filter has no poles to move, so it stays stable at any word length; only its zeros, and so its stopband, shift.'}</p></div>
-      ${iir && q.struct === 'sos' ? `<div class="panel card"><div class="card-head"><h2>Inside one biquad</h2></div>${dfDiagram(q.ef)}<p class="caption">Each section of the cascade rounds once, at Q. That rounding error (variance q²/12, with q one step of the ${q.sig}-bit signal) feeds back through −a₁ and −a₂, so the section's own poles amplify it before the later sections filter it.${q.ef ? ' Error feedback (dashed) subtracts round(a₁)·r[n−1] + round(a₂)·r[n−2] before rounding, which cancels most of that amplification when the poles sit near z = 1.' : ''}</p></div>` : ''}
-      ${rtlCard(d)}
-      ${rtlSimCard(d)}
-      <div class="panel card"><div class="card-head"><h2>Rounding effects</h2></div>${quantScore(d, qa)}<p class="caption">Coefficient rounding changes which filter you get. Round-off noise is separate: it is the error added every time the arithmetic rounds a result, measured here on a test signal and compared with theory.</p></div></div></div>`;
+      <div class="panel card"><div class="card-head"><h2>Response, before and after rounding</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)', w: 3.5 }, { label: `Quantized, ${q.coef}-bit coefficients`, w: 1.6, color: 'var(--s2)' }])}<div class="chart" id="qMag"></div><p class="caption">Blue is the filter you designed. Orange is the same filter after every coefficient is rounded to ${q.coef} bits, which is what fixed-point hardware actually computes. Where orange crosses into the shaded area, rounding alone broke the spec.</p>${unstableMsg}</div>
+      <div class="panel card"><div class="card-head"><h2>Stopband attenuation against word length</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)', dash: true }, ...qa.sweep.map(s => ({ label: s.name, color: s.color, dash: s.dash }))])}<div class="chart" id="qSweep"></div><p class="caption">Each point rounds the same design to that many bits; nothing is redesigned. Fewer bits mean coarser steps and usually less stopband attenuation. ${sweepNote} The dotted marker is your current setting.</p><div id="qSweepT"></div></div>
+      ${iir && q.struct === 'sos' ? `<div class="panel card"><div class="card-head"><h2>Inside one biquad</h2></div>${dfDiagram(q.ef)}<p class="caption">Each section of the cascade rounds once, at Q. That rounding error (variance q²/12, with q one step of the ${q.sig}-bit signal) feeds back through −a₁ and −a₂, so the section's own poles amplify it before the later sections filter it.${q.ef ? ' Error feedback (dashed) subtracts round(a₁)·r[n−1] + round(a₂)·r[n−2] before rounding, which cancels most of that amplification when the poles sit near z = 1.' : ''}</p></div>` : ''}</div>
+    <div class="col"><div class="panel card"><div class="card-head"><h2>Rounding effects</h2></div>${quantScore(d, qa)}<p class="caption">Coefficient rounding changes which filter you get. Round-off noise is separate: it is the error added every time the arithmetic rounds a result, measured here on a test signal and compared with theory.</p></div>
+      <div class="panel card"><div class="card-head"><h2>Poles and zeros</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)' }, { label: 'Quantized', color: 'var(--s2)' }])}<div class="chart" id="qPZ"></div><p class="caption">Rounding moves poles and zeros. ${iir ? 'A pole that reaches the unit circle makes the filter ring forever or blow up; high-order direct form is far more sensitive than a cascade of biquads.' : 'An FIR filter has no poles to move, so it stays stable at any word length; only its zeros, and so its stopband, shift.'}</p></div>
+</div></div>
+    <div class="hwrow">${rtlCard(d)}${rtlSimCard(d)}</div>`;
   $('#qRound').value = q.round; if (iir) $('#qStruct').value = q.struct;
   const upd = () => renderQuant(current);
   $('#qCoef').oninput = e => { q.coef = +e.target.value; upd(); focusRestore('qCoef'); }; $('#qSig').oninput = e => { q.sig = +e.target.value; upd(); focusRestore('qSig'); };
@@ -682,7 +686,7 @@ function renderQuant(d) {
   $('#qOver').value = q.overflow; $('#qOver').onchange = e => { q.overflow = e.target.value; upd(); };
   if (iir) { $('#qHead').oninput = e => { q.headroom = +e.target.value; upd(); focusRestore('qHead'); }; $('#qEF').onchange = e => { q.ef = e.target.checked; upd(); focusRestore('qEF'); }; }
   const fr = Array.from(d.resp.f), y = Array.from(qa.resp.db);
-  lineChart($('#qMag'), { label: 'Magnitude before and after quantization', height: 290, xd: [0, nyq], yd: yDomain(st), yLabel: 'Gain (dB)', xLabel: 'Frequency (Hz)', shades: magShades(st, d), series: [{ x: fr, y: Array.from(d.resp.db) }, { x: fr, y }],
+  lineChart($('#qMag'), { label: 'Magnitude before and after quantization', height: 290, xd: [0, nyq], yd: yDomain(st), yLabel: 'Gain (dB)', xLabel: 'Frequency (Hz)', shades: magShades(st, d), series: [{ x: fr, y: Array.from(d.resp.db), w: 3.5 }, { x: fr, y, w: 1.6 }],
     tip: i => `<b>${fmtN(d.resp.f[i], 1)} Hz</b><br><span class="sw" style="background:var(--s1)"></span>${fmtN(d.resp.db[i], 2)} dB<br><span class="sw" style="background:var(--s2)"></span>${fmtN(y[i], 2)} dB` });
   const wd = qa.sweepWords, series = [{ x: wd, y: wd.map(() => qa.floatAtten), color: 'var(--s1)', dash: true }, ...qa.sweep.map(s => ({ x: wd, y: s.y, color: s.color, dash: s.dash }))];
   const all = series.flatMap(s => s.y).filter(Number.isFinite), hi = Math.max(...all, st.rs) + 6;
@@ -694,7 +698,7 @@ function renderQuant(d) {
 }
 function focusRestore(id) { const el = document.getElementById(id); if (el) el.focus(); }
 function quantScore(d, qa) {
-  const st = state, lsb = Math.pow(2, -qa.fmt.fracBits), row = (ok, lab, val, sub) => `<div class="row"><span class="ic ${ok ? 'ok' : 'no'}" aria-hidden="true">${ok ? '✓' : '✕'}</span><span class="lab">${lab}</span><span class="val num">${val}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
+  const st = state, lsb = Math.pow(2, -qa.fmt.fracBits), row = (ok, lab, val, sub) => `<div class="row"><span class="ic ${ok ? 'ok' : 'no'}" aria-hidden="true">${ok ? '✓' : '✕'}</span><span class="lab">${lab}</span><span class="val num">${unitSplit(val)}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
   const stopOk = qa.alive && qa.m.atten >= st.rs - 0.01, ripOk = qa.alive && qa.m.ripple <= st.rp * 1.0005 + 1e-6;
   let h = '<div class="score">';
   h += row(qa.stable, 'Stability', qa.stable ? 'Stable' : 'Unstable', d.kind === 'fir' ? 'FIR filters cannot go unstable.' : `Largest pole radius ${fmtN(qa.maxR, 4)}`);
@@ -746,15 +750,15 @@ const miniIcon = bt => {
 };
 function buildControls() {
   $('#controls').innerHTML = `
-  <details class="grp" id="gMethod"><summary><h3>Method</h3><span class="sum" id="sumMethod"></span></summary><div class="method" role="radiogroup" aria-label="Design method">${Object.entries(METHODS).map(([k, m]) => `<label><input type="radio" name="method" value="${k}"><b>${m.name}</b><small>${m.note}</small></label>`).join('')}</div></details>
-  <details class="grp" open><summary><h3>Response type</h3><span class="sum" id="sumBtype"></span></summary><div class="seg" id="btype" role="group" aria-label="Response type">${Object.entries(BTYPES).map(([k, l]) => `<button data-v="${k}" aria-pressed="false">${miniIcon(k)}${l}</button>`).join('')}</div></details>
-  <details class="grp" open><summary><h3>Spec</h3><span class="sum"></span></summary>
+  <details class="grp" id="gMethod"><summary><h2>Method</h2><span class="sum" id="sumMethod"></span></summary><div class="method" role="radiogroup" aria-label="Design method">${Object.entries(METHODS).map(([k, m]) => `<label><input type="radio" name="method" value="${k}"><b>${m.name}</b><small>${m.note}</small></label>`).join('')}</div></details>
+  <details class="grp" open><summary><h2>Response type</h2><span class="sum" id="sumBtype"></span></summary><div class="seg" id="btype" role="group" aria-label="Response type">${Object.entries(BTYPES).map(([k, l]) => `<button data-v="${k}" aria-pressed="false">${miniIcon(k)}${l}</button>`).join('')}</div></details>
+  <details class="grp" open><summary><h2>Spec</h2><span class="sum"></span></summary>
     <div class="field"><label for="fs">Sample rate</label><span><input id="fs" type="number" min="100" step="100"></span></div>
     <div id="edgeFields"></div>
     <div class="field"><label for="rp">Passband ripple</label><span><input id="rp" type="number" min="0.01" max="6" step="any"></span></div>
     <div class="field"><label for="rs">Stopband attenuation</label><span><input id="rs" type="number" min="10" max="140" step="any"></span></div>
     <p class="hint">Frequencies in Hz, ripple and attenuation in dB.</p></details>
-  <details class="grp" id="gSize"><summary><h3>Size</h3><span class="sum" id="sumSize"></span></summary>
+  <details class="grp" id="gSize"><summary><h2>Size</h2><span class="sum" id="sumSize"></span></summary>
     <div class="field hidden" id="winRow"><label for="win">Window</label><select id="win">${Object.entries(WINDOWS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
     <div class="seg" id="omode" role="group" aria-label="Order selection"><button data-v="auto" aria-pressed="true">Pick for me</button><button data-v="manual" aria-pressed="false">Set it</button></div>
     <div class="field"><label for="ord" id="ordLab">Taps</label><span><input id="ord" type="number" min="1" step="1"></span></div>
@@ -815,7 +819,11 @@ function init() {
   $('#theme').textContent = dark ? 'Light theme' : 'Dark theme';
   $('#theme').addEventListener('click', () => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = t; $('#theme').textContent = t === 'dark' ? 'Light theme' : 'Dark theme'; render(); });
   $('#copyPy').addEventListener('click', () => current && copy(pythonSnippet(current)));
-  $$('.tabs button').forEach(b => b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); }));
+  $$('.tabs button').forEach(b => b.addEventListener('click', () => {
+    if (state.tab === b.dataset.tab) return;
+    state.tab = b.dataset.tab; render();
+    const v = $('#view'); v.classList.toggle('enter', false); void v.offsetWidth; v.classList.add('enter');   // a short fade answers the tab change (CSS skips it under reduced motion)
+  }));
   buildControls(); syncControls();
   let rt; new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => current && render(), 120); }).observe($('#view'));
   render(); window.__filterlab = { state, designFilter, sig, rsim, get current() { return current; } };

@@ -65,3 +65,41 @@ Format: decision / why / rejected alternative.
 - **RTLSIM UI. Default 32 samples** (range 16 to 256), so individual clock edges are visible on a phone; at long lengths the clock row becomes a band. The noise input is seeded (seed 11), so it is repeatable.
 - **RTLSIM UI. The export card's tag is now "Generated, not synthesized, not run in an HDL simulator"**, replacing "not simulated": the text is now simulated, but only by Filterlab's own interpreter. The simulation card carries the requested plain label verbatim.
 - **Review (independent code-reviewer agent). Fixed:** shift amounts were zero-extended inside their own expression. They are now evaluated self-determined in their own type and read as unsigned, as IEEE 1800 requires; generated code only uses literal amounts, so no design changed. Reserved words used as names, and unsized literals that do not fit 32 bits, are now rejected. Six checks were added: shift-amount type, `?:` sign, a signed vs unsigned compare, a non-blocking swap, and the two rejections. The docs no longer imply an independent author. **Not changed:** the X model stays all-or-nothing (disclosed; generated code never reads X after reset). A slider drag re-simulates on every input event, which is fast enough at 256 samples and was not optimized.
+
+## UI polish run (auto/ui-polish)
+
+- **UI. No questions, per the brief:** Impeccable's context step asks for one probe question and FontHound wants the owner to pick fonts by eye. Both were skipped, and product context came from CLAUDE.md and the brief. Rejected: blocking on a question the owner said not to ask.
+- **UI. Fonts are a system stack, nothing embedded.** There is no FontHound selection on disk, and the only freely licensed font file present is matplotlib's DejaVu. Bahnschrift (DIN 1451, engineering lettering, shipped with Windows) is used for display and readouts, with DIN Alternate / Barlow / Roboto Condensed / system-ui fallbacks, plus Cascadia Mono for data. Rejected: base64-embedding a Windows font (not ours to redistribute) and Google Fonts (no network).
+- **UI. Took from ui-ux-pro-max:** dense spacing, mono-for-data with sans-for-labels, its accessibility checklist, and "not colour alone". **Rejected:** its suggested style, pattern, palette and fonts, which matched badly ("Biomimetic", "Enterprise Gateway", #FF4D4D, Google Fonts).
+- **UI task 3. Impeccable's craft floor rejects a system display face; the brief overrides it.** The brief allows "a carefully chosen system stack" when no font can be embedded legitimately, and Bahnschrift is a real DIN 1451 cut. Without Bahnschrift (macOS, Linux), the stack falls back through DIN Alternate / Barlow / Roboto Condensed to system-ui.
+- **UI task 3. Readout units are split for display only** (`unitSplit`): the text "0.826 dB" is unchanged, and the number is wrapped big with the unit small and muted. Values that do not start with a number ("Stable", "order 8, 4 biquads") are set smaller rather than split.
+- **UI task 4. Plots sit on an instrument "screen":**
+  - the plot field uses the `--screen` surface inside a `--bezel` frame, with a major graticule plus a minor one halfway between the ticks;
+  - the pole-zero plot gets the same square screen;
+  - chart text went from 11 px `--ink-3` to 12 px `--ink-2`;
+  - the multiplicity label is offset and haloed, so it no longer collides with the × marker;
+  - the pole-zero legend uses drawn SVG marks instead of unicode glyphs.
+- **UI task 4. Ideal and quantized differ without colour:** wherever both are overlaid (Quantization response, Signal spectra, first samples), the ideal trace is wide (3.5 px) and drawn underneath, and the quantized one is thin (1.6 px) on top; the legends show the same weights. The dataviz validator passes both themes against the new screen surfaces: CVD ΔE 24.7 light and 26.8 dark (target ≥ 8), normal-vision ΔE 33.6 and 31.8, contrast ≥ 3:1. Trace hues are unchanged.
+- **UI task 5. Quantization tab layout:**
+  - The plots column holds the response, the word-length sweep and (IIR) the biquad diagram.
+  - The side column leads with **Rounding effects** (the tab's result), then poles and zeros.
+  - Hardware export and Simulate hardware share a full-width row below, side by side above 1180 px.
+
+  This removes the 1,500 px dead column and puts a failing stopband at the top. Rejected: a readout strip under the sliders (it would duplicate the Rounding effects card).
+- **UI task 5. Long explanations fold into "How this was checked" / "How the simulation works".** Their wording is unchanged. The honesty tags ("Generated, not synthesized, not run in an HDL simulator", "Interpreted in your browser") and the simulator's plain label stay visible. Rejected: hiding any honesty wording.
+- **UI task 5. Phones open on the plot:** at ≤ 480 px the stage comes first and the design controls follow it, so a tab change visibly changes the screen. Rejected: a bottom sheet for the controls (new interaction code, and more risk than this pass should take).
+- **UI task 5. Control group titles are h2**, which fixes the detector's skipped heading level. The biquad diagram uses the new tokens (panel-well boxes, bezel strokes, DIN name) and keeps diagram-design's earlier rules: orthogonal connectors, masked labels, and two accents for Q and the error-feedback path.
+- **UI task 6. Motion answers actions only.**
+  - Removed: the 0.9 s magnitude-trace "draw" that played on page load.
+  - Added, all inside `prefers-reduced-motion: no-preference`:
+    - a 160 ms fade-and-settle of the view on a tab change (only when the tab actually changes, not on every slider re-render, which would flicker);
+    - a 140 ms reveal when a details panel opens;
+    - 120 ms colour transitions on buttons, tabs and segments.
+  - Caught by `ui_sweep`: an inline comment briefly swallowed the pinned-B series line. It was fixed before commit.
+- **UI task 7. Final check.** I looked at all screenshots: every tab at 1440 px in light and dark, every tab's phone viewport in both themes, the IIR Quantization view and a forced simulator mismatch. Fixed from that look:
+  - the Signal tab's "First samples" now shows 120 samples, not 400 (it was unreadable; the caption says the spectra use the whole run);
+  - legend line samples have a 2 px floor, so the thin quantized sample still reads as orange;
+  - the compare swatch's repeating-gradient stripes are now a dashed border (detector advisory).
+
+  Impeccable's detector afterwards: the file scan and 1440×1000 are clean. At 390×844 it still reports "nested cards" for the segmented control in two card headers. It is a control, not a card, so I logged it as a false positive rather than restyling a working control.
+- **UI task 7. README screenshots** live in `docs/screenshots/`: three curated images (light response, dark quantization, a phone pair), because `shots/` is not committed. `examples/gallery.png` is a matplotlib figure of DSP results, not of the UI, so it was not regenerated.

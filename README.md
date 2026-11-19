@@ -1,23 +1,77 @@
-# Filterlab: digital filter design toolkit
+# Filterlab
 
-A numpy-only Python library and a single-file interactive app for designing FIR and IIR filters, inspecting them, and seeing what fixed-point arithmetic does to them.
+A digital filter design bench that runs in the browser. Design FIR and IIR filters, see exactly what happens when you round them to fixed-point hardware, and export the result as SystemVerilog you can watch run.
 
-| | |
-|---|---|
-| FIR | Windowed-sinc (rectangular, Hann, Hamming, Blackman, Kaiser); Parks-McClellan / Remez exchange for all four linear-phase types: odd and even lengths, Hilbert transformers, differentiators |
-| IIR | Butterworth, Chebyshev I, Chebyshev II, elliptic, each with a minimum-order estimate. Analog prototype, band transform, bilinear transform, biquad (SOS) output |
-| Analysis | Bode data, group delay, poles and zeros, spec measurement |
-| Quantization | Qm.n formats, coefficient rounding (FIR, biquad cascade, single direct form), bit-true fixed-point simulation with saturate or wrap overflow, input headroom and error-feedback rounding, round-off noise theory |
+![Quantization tab, dark theme: the quantized response (thin, orange) over the ideal one (wide, blue), rounding effects, word-length sweep](docs/screenshots/quantization-dark.png)
 
-## Layout
+## What it does
+
+**Design**
+- FIR by windowing (rectangular, Hann, Hamming, Blackman, Kaiser) and by Parks-McClellan equiripple for all four linear-phase types, odd and even lengths. Hilbert transformers and differentiators are available in the library.
+- IIR from Butterworth, Chebyshev I and II, and elliptic prototypes (analog prototype, band transform, bilinear transform, biquad output), with minimum-order estimation from your pass and stop band specs.
+- Bode magnitude and phase, group delay, and a pole-zero plot. Band edges are draggable handles on the plot.
+
+**Quantize**
+- Choose a word length (Qm.n formats) and see the filter after rounding: the frequency response, the poles and zeros, and the round-off noise. Coefficient rounding covers FIR, the biquad cascade and a single direct form.
+- A bit-true fixed-point simulator for FIR and cascaded second-order sections, with saturate or wrap overflow, input headroom, and optional error feedback.
+- Measured round-off noise next to the theoretical prediction.
+
+**Build hardware**
+- Export a quantized FIR (direct or transposed form) or biquad cascade as SystemVerilog, with a self-checking testbench and a vectors file.
+- Run the generated hardware in the browser. A built-in interpreter executes the generated SystemVerilog one clock at a time, shows the waveform, and compares every output sample with the bit-true model.
+- A cost report with multiplier counts, shift-and-add adders, and register bits. It reports counts only, not area or speed.
+
+**Try it on signals**
+- Send test tones or a WAV file through the design and compare the floating-point and fixed-point output spectra.
+
+## Run it
+
+Open `web/index.html` in a browser. It is one self-contained file: nothing to install, and no network needed.
+
+After editing anything in `web/` (`dsp.js`, `rtl.js`, `rtlsim.js`, `app.js`, `style.css`, `index.template.html`), rebuild the page with `npm run build` (or `python web/build.py`); `web/index.html` is generated, so do not edit it by hand. To view it in VS Code's Simple Browser, run `npm run serve` (it needs Python) and open `http://localhost:8000/`. On Windows PowerShell, if scripts are blocked, use `npm.cmd run ...`.
+
+## How it was checked
+
+The tests need Python 3 with numpy and scipy, Node 22 or newer, and Edge or Chrome. There are no npm packages.
+
+| Check | Command | What it covers |
+|---|---|---|
+| Python vs scipy | `npm run test:py` | Windows, Remez, IIR design, order estimates, filter responses, measured noise vs theory |
+| Python vs JavaScript | `npm run test:js` | The browser code matches the Python library at machine precision, including poles and zeros and the generated SystemVerilog text |
+| RTL structure and arithmetic | `npm run test:rtl` | Generated SystemVerilog against an independent Python evaluator; Icarus Verilog runs too if it is installed |
+| In-browser hardware simulation | `npm run test:rtlsim` | The interpreter against the bit-true models on 10 designs, with a deliberately broken coefficient that must be caught |
+| User interface | `npm run test:ui` | Rebuilds the page, then checks that every method and response type meets its spec in the real page, with no console errors, and takes screenshots |
+| Everything | `npm run test:all` | All of the above, in order; stops at the first failure |
+
+Two statements about the hardware side are worth keeping precise:
+
+- **The SystemVerilog has not been run in a standard HDL simulator or synthesized.** The generator and the interpreters that check it were written in this project, so they share one reading of the language rules. Installing Icarus Verilog and running `npm run test:rtl` is the step that would close that gap (see [Hardware export](#hardware-export-systemverilog)).
+- **The cost report is a count of operations.** It makes no claim about area, clock speed or power.
+
+**Python launcher.** `run_tests.js` uses the first of `python`, `py -3`, `python3` that can import numpy.
+On the development machine (Windows 11) that is `python` (3.12); `python3` there is the Microsoft Store stub.
+Run the scripts directly with the same launcher, e.g. `python -m pytest tests -q`.
+
+**Browser.** The UI tests drive headless Edge or Chrome over the DevTools protocol (`tests/browser.js`).
+Set `EDGE_PATH` or `CHROME_PATH` to choose one; otherwise the usual install locations are searched.
+Screenshots go to `shots/` (light and dark, 1440 and 390 px wide). Both UI scripts exit non-zero on a missed
+spec, a failed interaction check or any console error.
+
+## Why this exists
+
+I built Filterlab to connect three things I want to work on: signal processing, digital hardware, and the numerics that sit between them. A filter that looks right in floating point can lose its stop band or overflow once it is rounded to a few bits. Filterlab shows that happening and then gives you the hardware description of the version that survived.
+
+## Project layout
 
 ```
-dsp/                 the library (fir, remez, iir, analysis, quant)
-tests/               pytest suite against scipy, plus the JS cross-check
-web/                 the interactive app: dsp.js (port of dsp/), app.js, style.css, build.py -> index.html
-examples/demo.py     plots every method, types III/IV, coefficient rounding and error feedback (gallery.png)
-docs/theory.md       order estimates, FIR types, the scaling definition, the noise model and error feedback
+dsp/        Python library: filter design, analysis, fixed-point, RTL generation (numpy only)
+web/        Browser app: dsp.js (port of dsp/), rtl.js, rtlsim.js (interpreter), app.js, style.css; build.py -> index.html
+tests/      pytest vs scipy, the JS cross-check, the RTL evaluator, the interpreter check, interface tests
+docs/       Theory, RTL notes, UI design notes, design decisions, status, screenshots
+examples/   Scripts that use the library directly: demo.py (writes gallery.png), rtl_export.py
 ```
+
+See `docs/theory.md` for the math (including how each biquad is scaled), `docs/rtl.md` for the generated module's interface and latency, and `docs/DECISIONS.md` for the choices made along the way and why.
 
 ## Python
 
@@ -73,6 +127,19 @@ the end, and read every value at the waveform cursor as an integer and as a Qm.n
 the subset is rejected as an "unsupported construct", never guessed. Limits are in
 [docs/rtl.md](docs/rtl.md#in-browser-simulation).
 
+## Interactive app
+
+Pick a method and response type, drag the P and S tabs on the magnitude plot to move the band edges, and the filter is redesigned live. "Pin as B" keeps the current magnitude response on the plot (dashed) so you can compare the next design against it. The Quantization tab shows the response and poles before and after rounding, a word-length sweep, measured against predicted round-off noise, and, for IIR filters, a diagram of one biquad with its rounding point. It also has controls for overflow (saturate or wrap), input headroom and error feedback. "Copy Python" reproduces the current design with this library. The Signal tab runs a seeded test signal (three tones plus noise) or a WAV file you upload through the current design, in floating point and bit-true fixed point. It shows the input and output spectra and the first samples, and can play each one (playback starts muted and is capped at half scale). On a phone the views are on a tab bar at the bottom, and each view opens on its plot with the design controls below it.
+
+The look is a bench instrument. Each plot is a recessed screen with a graticule, and the readouts (ripple,
+attenuation, taps, word lengths, SNR) are large tabular numbers with small units. Light and dark themes are designed
+separately. Floating-point traces are blue and wide; quantized traces are orange and thin, so the two differ by line
+weight as well as colour. The design notes are in [docs/ui-design.md](docs/ui-design.md).
+
+![Response tab, light theme: magnitude with spec shading and draggable band edges, poles and zeros, spec check](docs/screenshots/response-light.png)
+
+![Phone layout: Response tab in light, Signal tab in dark](docs/screenshots/phone.png)
+
 ## Python and JavaScript names
 
 `web/dsp.js` is a line-for-line port of `dsp/`, cross-checked by `tests/cross_check.js`. Python names are
@@ -100,36 +167,6 @@ snake_case and JavaScript names are camelCase; keyword-only Python options becom
 | `tone_signal(n, fs, tones, noise_rms, seed)` | `toneSignal(n, fs, tones, noiseRms, seed)` | same seeded generator (mulberry32), bit-identical |
 | `power_spectrum_db(x, fs, nfft)` | `powerSpectrumDb(x, fs, nfft)` | Welch, Hann, 50 % overlap; full-scale sine = 0 dB |
 | (none) | `parseWav(arrayBuffer)` | browser upload only: PCM 16/24-bit or float32, mono/stereo, at most 10 s |
-
-## Interactive app
-
-Open `web/index.html` in a browser (no server, no network). Pick a method and response type, drag the P and S tabs on the magnitude plot to move the band edges, and the filter is redesigned live. "Pin as B" keeps the current magnitude response on the plot (dashed) so you can compare the next design against it. The Quantization tab shows the response and poles before and after rounding, a word-length sweep, measured against predicted round-off noise, and, for IIR filters, a diagram of one biquad with its rounding point. It also has controls for overflow (saturate or wrap), input headroom and error feedback. "Copy Python" reproduces the current design with this library. The Signal tab runs a seeded test signal (three tones plus noise) or a WAV file you upload through the current design, in floating point and bit-true fixed point. It shows the input and output spectra and the first samples, and can play each one (playback starts muted and is capped at half scale). On a phone the views are on a tab bar at the bottom.
-
-Rebuild after editing the sources: `npm run build` (or `python web/build.py`).
-
-To view it in VS Code's Simple Browser, run `npm run serve` and open `http://localhost:8000/`.
-
-## Tests
-
-Needs Python 3 with numpy and scipy, Node 22 or newer, and Edge or Chrome. No npm packages.
-
-```
-npm run test:py      # pytest: library vs scipy, noise vs theory
-npm run test:js      # export_reference.py, then cross_check.js: JS port vs Python at machine precision
-npm run test:ui      # rebuild index.html, ui_sweep.js (every method x response type meets spec), ui_shots.js
-npm run test:rtl     # RTL export: structure + independent evaluator vs the bit-true simulator; iverilog runs if installed
-npm run test:rtlsim  # web/rtlsim.js: 10 designs vs the Python evaluator and both bit-true models, mutation, SV width rules
-npm run test:all     # all of the above, in order; stops at the first failure
-```
-
-**Python launcher.** `run_tests.js` uses the first of `python`, `py -3`, `python3` that can import numpy.
-On the development machine (Windows 11) that is `python` (3.12); `python3` there is the Microsoft Store stub.
-Run the scripts directly with the same launcher, e.g. `python -m pytest tests -q`.
-
-**Browser.** The UI tests drive headless Edge or Chrome over the DevTools protocol (`tests/browser.js`).
-Set `EDGE_PATH` or `CHROME_PATH` to choose one; otherwise the usual install locations are searched.
-Screenshots go to `shots/` (light and dark, 1440 and 390 px wide). Both UI scripts exit non-zero on a missed
-spec, a failed interaction check or any console error.
 
 ## Design notes and limits
 

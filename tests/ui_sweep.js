@@ -98,6 +98,24 @@ const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
     }
     console.log('desktop overflow check done (remez, cheby1 x 4 tabs)');
 
+    // themes: each applies, is remembered across a reload, keeps every tab free of sideways scroll at 1440 and 390 px
+    for (const t of ['swiss', 'phosphor', 'paper', 'dark', 'light']) {
+      await p.evaluate(t => { const s = document.getElementById('theme'); s.value = t; s.dispatchEvent(new Event('change')); }, t);
+      await p.goto(fileUrl('web/index.html')); await p.wait(500);
+      const got = await p.evaluate(() => document.documentElement.dataset.theme);
+      if (got !== t) problems.push(`theme ${t} was not remembered across a reload (got ${got})`);
+      for (const [w, h] of [[1440, 1000], [390, 844]]) {
+        await p.setViewport(w, h);
+        for (const tab of ['response', 'quant']) {
+          await p.click(`[data-tab=${tab}]`); await p.wait(250);
+          const over = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+          if (over > 0) problems.push(`theme ${t}: ${tab} tab scrolls sideways by ${over} px at ${w} px`);
+        }
+      }
+      await p.setViewport(1440, 1000);
+    }
+    console.log('themes: 5 applied, remembered, no sideways scroll');
+
     // hardware export card: present for FIR and IIR, honest label, text matches web/rtl.js for the shown settings
     for (const method of ['remez', 'cheby1']) {
       await p.evaluate(m => { const s = window.__filterlab.state; s.method = m; Object.assign(s.q, { ef: false, headroom: 0, coef: 16 }); }, method);

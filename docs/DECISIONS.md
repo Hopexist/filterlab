@@ -103,3 +103,19 @@ Format: decision / why / rejected alternative.
 
   Impeccable's detector afterwards: the file scan and 1440×1000 are clean. At 390×844 it still reports "nested cards" for the segmented control in two card headers. It is a control, not a card, so I logged it as a false positive rather than restyling a working control.
 - **UI task 7. README screenshots** live in `docs/screenshots/`: three curated images (light response, dark quantization, a phone pair), because `shots/` is not committed. `examples/gallery.png` is a matplotlib figure of DSP results, not of the UI, so it was not regenerated.
+
+## Interactive run (auto/ui-interactive)
+
+- **Themes. Five choices in one header switcher:** Instrument light, Instrument dark, Swiss, Phosphor and Paper. Each is one `:root[data-theme]` token block plus a few theme-specific rules.
+  - **Swiss** is light: white sheet, black 2 px rules instead of card borders, no radius, Helvetica stack.
+  - **Phosphor** is dark: green-black CRT, glow on traces via `drop-shadow(currentColor)`, readouts in the phosphor accent.
+  - **Paper** is light: warm sheet, inline SVG grain (no file, no network), serif headings, dotted graticule.
+- **Themes. Checks:**
+  - The dataviz validator passes each trace pair on its own screen: Swiss `#2a78d6/#e0592a`, Phosphor `#3d8ef5/#e2661e`, Paper `#2a6fc4/#c8551f`.
+  - Phosphor's first pick, `#4aa3ff/#ff8a3d`, failed the dark lightness band and was stepped down.
+  - Text contrast (`docs/ui-contrast.py` method): ink-3 is 5.0:1 or better in every theme; the accent is at least 6.7:1.
+  - Ideal vs quantized keeps the wide/thin line-weight encoding in every theme.
+  - Focus uses the theme accent.
+- **Themes. Remembered per viewer** in `localStorage` (`filterlab.theme`), with try/catch on read and write; if storage is blocked, the theme still applies for the visit. With no stored choice, the system light/dark preference picks Instrument light or dark, as before.
+- **Themes. Not built:** Neumorphism, Pixel Art, Maximalism and Surrealism. Each trades legibility of the data (low-contrast embossing, coarse pixels, competing ornament, distortion) for style, which this tool cannot afford. Any other theme requested later is logged as "later".
+- **Themes. Brief over a rule:** Phosphor is "near-black with one bright accent" and Paper is "warm cream with orange", both patterns the previous critique listed as generic tells. The brief asks for them explicitly, so they ship as opt-in themes, and the default stays Instrument.

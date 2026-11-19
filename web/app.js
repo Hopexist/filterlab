@@ -164,7 +164,7 @@ function lineChart(el, cfg) {
     } else {
       let d = '', pen = false;
       for (let i = 0; i < se.x.length; i++) { const yv = se.y[i]; if (!Number.isFinite(yv)) { pen = false; continue; } d += (pen ? 'L' : 'M') + sx(se.x[i]).toFixed(1) + ' ' + sy(yv).toFixed(1); pen = true; }
-      s += `<path class="trace${se.draw && !drawn ? ' draw' : ''}" d="${d}" stroke="${col}" ${se.dash ? 'stroke-dasharray="6 4"' : ''}${se.w ? ` style="stroke-width:${se.w}"` : ''}/>`;
+      s += `<path class="trace${se.draw && !drawn ? ' draw' : ''}" d="${d}" stroke="${col}" ${se.dash ? 'stroke-dasharray="6 4"' : ''} style="color:${col}${se.w ? `;stroke-width:${se.w}` : ''}"/>`;
     }
   });
   s += '</g>';
@@ -696,6 +696,14 @@ function renderQuant(d) {
   $('#qSweepT').innerHTML = tableDetails(['Bits', ...qa.sweep.map(s => s.name)], wd.map((w, i) => [w, ...qa.sweep.map(s => Number.isFinite(s.y[i]) ? fmtN(s.y[i], 1) + ' dB' : 'unstable or no passband')]));
   pzChart($('#qPZ'), { zeros: d.zeros, poles: d.poles, poleOrigin: d.poleOrigin, qZeros: qa.zeros, qPoles: qa.poles, qPoleOrigin: qa.poleOrigin || 0, fs: st.fs });
 }
+/* ---------- themes: Instrument light/dark, Swiss, Phosphor, Paper; the choice is remembered per viewer ---------- */
+const THEMES = ['light', 'dark', 'swiss', 'phosphor', 'paper'];
+function storedTheme() { try { const t = localStorage.getItem('filterlab.theme'); return THEMES.includes(t) ? t : null; } catch (e) { return null; } }
+function setTheme(t, remember) {
+  if (!THEMES.includes(t)) t = 'light';
+  document.documentElement.dataset.theme = t; $('#theme').value = t;
+  if (remember) { try { localStorage.setItem('filterlab.theme', t); } catch (e) { /* storage blocked: the theme still applies for this visit */ } }
+}
 function focusRestore(id) { const el = document.getElementById(id); if (el) el.focus(); }
 function quantScore(d, qa) {
   const st = state, lsb = Math.pow(2, -qa.fmt.fracBits), row = (ok, lab, val, sub) => `<div class="row"><span class="ic ${ok ? 'ok' : 'no'}" aria-hidden="true">${ok ? '✓' : '✕'}</span><span class="lab">${lab}</span><span class="val num">${unitSplit(val)}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
@@ -815,9 +823,8 @@ function render() {
 }
 
 function init() {
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches; document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  $('#theme').textContent = dark ? 'Light theme' : 'Dark theme';
-  $('#theme').addEventListener('click', () => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = t; $('#theme').textContent = t === 'dark' ? 'Light theme' : 'Dark theme'; render(); });
+  setTheme(storedTheme() || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), false);
+  $('#theme').addEventListener('change', e => setTheme(e.target.value, true));
   $('#copyPy').addEventListener('click', () => current && copy(pythonSnippet(current)));
   $$('.tabs button').forEach(b => b.addEventListener('click', () => {
     if (state.tab === b.dataset.tab) return;

@@ -57,5 +57,23 @@ out["quant_b"] = {"xe": L(xe), "sqe": L(sqe), "fe": [fe.int_bits, fe.frac_bits],
 xc = tone_signal(5000, 8000.0, ((440, 0.5), (1800, 0.25)), noise_rms=0.01, seed=11)
 fc, dbc = power_spectrum_db(xc, 8000.0, 1024)
 out["spectrum"] = {"x": L(xc), "f": L(fc), "db": L(dbc), "x_short": L(tone_signal(301, 1000.0, ((50, 1.0),), noise_rms=0.1, seed=3))}
+# ---- RTL export: generated text must be byte-identical in web/rtl.js ----
+from dsp.rtl import gen_fir_sv, gen_sos_sv, gen_testbench_sv, vectors_hex
+Fq = lambda f: [f.int_bits, f.frac_bits]
+hf = quantize_fir(np.array(h), 12, 1.0); hf_int = to_int(hf["hq"], hf["fmt"])
+d4 = design_iir("cheby1", "lowpass", 4, 0.1, fs=1.0, rp=1.0); f4, sq4, _ = quantize_sos(d4["sos"], 16); s4 = [list(map(int, to_int(r[[0, 1, 2, 4, 5]], f4))) for r in sq4]
+de6 = design_iir("ellip", "bandpass", 3, [0.1, 0.2], fs=1.0, rp=0.5, rs=50); f6, sq6, _ = quantize_sos(de6["sos"], 20); s6 = [list(map(int, to_int(r[[0, 1, 2, 4, 5]], f6))) for r in sq6]
+rtl = []
+for form, ov, sf_ in (("direct", "saturate", QFormat(0, 15)), ("transposed", "wrap", QFormat(0, 15)), ("direct", "wrap", QFormat(0, 19))):
+    rtl.append({"kind": "fir", "h": list(map(int, hf_int)), "coef": Fq(hf["fmt"]), "sig": Fq(sf_), "overflow": ov, "form": form, "name": f"fir_{form}_{ov}",
+                "text": gen_fir_sv(hf_int, hf["fmt"], sf_, overflow=ov, form=form, module_name=f"fir_{form}_{ov}")})
+rtl.append({"kind": "fir", "h": [1, -2, 3], "coef": [3, 0], "sig": [0, 7], "overflow": "saturate", "form": "transposed", "name": "fir_sh0",
+            "text": gen_fir_sv([1, -2, 3], QFormat(3, 0), QFormat(0, 7), overflow="saturate", form="transposed", module_name="fir_sh0")})
+for rows, fmt, ov, hb, ef, sf_, nm in ((s4, f4, "saturate", 0, False, QFormat(0, 15), "sos_plain"), (s4, f4, "wrap", 2, True, QFormat(0, 15), "sos_ef_h2"),
+                                       (s6, f6, "saturate", 1, True, QFormat(0, 17), "ellip_bp"), (s6, f6, "wrap", 0, False, QFormat(0, 11), "ellip_bp_12")):
+    rtl.append({"kind": "sos", "sos": rows, "coef": Fq(fmt), "sig": Fq(sf_), "overflow": ov, "headroom": hb, "ef": ef, "name": nm,
+                "text": gen_sos_sv(np.array(rows), fmt, sf_, overflow=ov, headroom_bits=hb, error_feedback=ef, module_name=nm)})
+out["rtl"] = {"designs": rtl, "tb": gen_testbench_sv("fir_t", QFormat(0, 15), 448, "fir_t.hex"),
+              "vx": [0, 1, -1, 32767, -32768, 1234], "vy": [5, -5, 0, -32768, 32767, -4321], "hex": vectors_hex([0, 1, -1, 32767, -32768, 1234], [5, -5, 0, -32768, 32767, -4321], QFormat(0, 15))}
 json.dump(out, open(os.path.join(os.path.dirname(__file__), "reference.json"), "w"))
 print("wrote reference.json")

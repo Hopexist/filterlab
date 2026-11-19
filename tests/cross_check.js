@@ -108,4 +108,16 @@ const rejects = [
   ['truncated fmt', wav({ write: () => {} }).slice(0, 30), /damaged|truncated|no format/],
 ];
 for (const [name, buf, re] of rejects) { let msg = ''; try { D.parseWav(buf); } catch (e) { msg = e.message; } close(`wav rejects: ${name}`, re.test(msg) ? 0 : 1, 0, EXACT); if (!re.test(msg)) console.log('   got:', msg || '(no error)'); }
+// ---- RTL export: web/rtl.js must produce byte-identical SystemVerilog ----
+const RTL = require('../web/rtl.js');
+const same = (name, js, py) => { let i = 0; while (i < js.length && js[i] === py[i]) i++; const ok = js === py; count++; if (!ok) fails++;
+  console.log(ok ? 'ok  ' : 'FAIL', name.padEnd(36), ok ? `identical, ${py.length} chars` : `first difference at char ${i}: JS ${JSON.stringify(js.slice(i, i + 40))} vs PY ${JSON.stringify(py.slice(i, i + 40))}`); };
+for (const r of ref.rtl.designs) {
+  const cf = D.qFormat(...r.coef), sf = D.qFormat(...r.sig);
+  const js = r.kind === 'fir' ? RTL.genFirSv(r.h, cf, sf, { overflow: r.overflow, form: r.form, moduleName: r.name })
+    : RTL.genSosSv(r.sos, cf, sf, { overflow: r.overflow, headroomBits: r.headroom, errorFeedback: r.ef, moduleName: r.name });
+  same(`rtl text ${r.name}`, js, r.text);
+}
+same('rtl testbench text', RTL.genTestbenchSv('fir_t', D.qFormat(0, 15), 448, 'fir_t.hex'), ref.rtl.tb);
+same('rtl vectors hex', RTL.vectorsHex(ref.rtl.vx, ref.rtl.vy, D.qFormat(0, 15)), ref.rtl.hex);
 console.log(fails ? `\n${fails} of ${count} FAILED` : `\nall ${count} cross-checks passed`); process.exit(fails ? 1 : 0);

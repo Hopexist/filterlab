@@ -73,6 +73,12 @@ for rows, fmt, ov, hb, ef, sf_, nm in ((s4, f4, "saturate", 0, False, QFormat(0,
                                        (s6, f6, "saturate", 1, True, QFormat(0, 17), "ellip_bp"), (s6, f6, "wrap", 0, False, QFormat(0, 11), "ellip_bp_12")):
     rtl.append({"kind": "sos", "sos": rows, "coef": Fq(fmt), "sig": Fq(sf_), "overflow": ov, "headroom": hb, "ef": ef, "name": nm,
                 "text": gen_sos_sv(np.array(rows), fmt, sf_, overflow=ov, headroom_bits=hb, error_feedback=ef, module_name=nm)})
+# unscaled resonant cascade: sections overflow the 16-bit signal (saturate clips, wrap folds over)
+d4u = design_iir("cheby1", "lowpass", 4, 0.1, fs=1.0, rp=1.0); fu = auto_format(np.abs(d4u["sos"]).max(), 18)
+su = [list(map(int, to_int(r[[0, 1, 2, 4, 5]], fu))) for r in d4u["sos"]]
+for ov in ("saturate", "wrap"):
+    rtl.append({"kind": "sos", "sos": su, "coef": Fq(fu), "sig": [0, 15], "overflow": ov, "headroom": 0, "ef": False, "name": f"sos_overflow_{ov}",
+                "text": gen_sos_sv(np.array(su), fu, QFormat(0, 15), overflow=ov, module_name=f"sos_overflow_{ov}")})
 from dsp.rtl import csd, rtl_cost_fir, rtl_cost_sos
 for r in rtl:
     cf_, sf_ = QFormat(*r["coef"]), QFormat(*r["sig"])
@@ -80,5 +86,14 @@ for r in rtl:
 out["rtl_csd"] = [[v, [list(d) for d in csd(v)]] for v in (0, 1, -1, 7, -3, 255, 256, -32768, 8388607, -8388608, 12345, -54321)]
 out["rtl"] = {"designs": rtl, "tb": gen_testbench_sv("fir_t", QFormat(0, 15), 448, "fir_t.hex"),
               "vx": [0, 1, -1, 32767, -32768, 1234], "vy": [5, -5, 0, -32768, 32767, -4321], "hex": vectors_hex([0, 1, -1, 32767, -32768, 1234], [5, -5, 0, -32768, 32767, -4321], QFormat(0, 15))}
+# ---- in-browser RTL interpreter (web/rtlsim.js): Python bit-true model and the independent Python evaluator ----
+import rtl_eval
+from dsp.rtl import rtl_stimulus, rtl_expected_fir, rtl_expected_sos
+out["rtlsim"] = []
+for r in rtl:
+    cf_, sf_ = QFormat(*r["coef"]), QFormat(*r["sig"]); x = rtl_stimulus(sf_, seed=3)
+    model = rtl_expected_fir(r["h"], cf_, sf_, x, overflow=r["overflow"]) if r["kind"] == "fir" else         rtl_expected_sos(np.array(r["sos"]), cf_, sf_, x, overflow=r["overflow"], headroom_bits=r["headroom"], error_feedback=r["ef"])
+    out["rtlsim"].append({"name": r["name"], "x": list(map(int, x)), "model": list(map(int, model)), "evaluator": rtl_eval.run(r["text"], x)})
+assert any(v in (2 ** 15 - 1, -2 ** 15) for v in out["rtlsim"][-2]["model"]), "the overflow design must actually saturate"
 json.dump(out, open(os.path.join(os.path.dirname(__file__), "reference.json"), "w"))
 print("wrote reference.json")

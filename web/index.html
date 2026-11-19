@@ -51,7 +51,7 @@ input, select { accent-color: var(--accent); }
 .controls { padding: 6px 16px 16px; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
 .controls section { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .controls section:last-child { border-bottom: 0; }
-.controls h3 { font-size: 15px; margin-bottom: 10px; }
+.controls h2, .controls h3 { font-size: 15px; margin-bottom: 10px; }
 .method { display: grid; gap: 6px; }
 .method label { display: grid; grid-template-columns: 18px 1fr; gap: 0 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--r-sm); cursor: pointer; background: var(--panel); }
 .method label:hover { background: var(--panel-2); }
@@ -161,7 +161,7 @@ table.t th { color: var(--ink-3); font-weight: 500; }
 .controls .grp > summary::-webkit-details-marker { display: none; }
 .controls .grp > summary::before { content: ""; width: 7px; height: 7px; border-right: 1.6px solid var(--ink-3); border-bottom: 1.6px solid var(--ink-3); transform: rotate(-45deg); align-self: center; flex: none; }
 .controls .grp[open] > summary::before { transform: rotate(45deg); }
-.controls .grp > summary h3 { margin: 0; }
+.controls .grp > summary h2, .controls .grp > summary h3 { margin: 0; }
 .controls .grp > summary .sum { margin-left: auto; color: var(--ink-3); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
 .controls .grp[open] > summary .sum:empty, .controls .grp[open] > summary .sum { display: none; }
 .controls .grp > :not(summary) { margin-bottom: 10px; }
@@ -175,14 +175,14 @@ table.t th { color: var(--ink-3); font-weight: 500; }
 .df-wrap { overflow-x: auto; }
 .df { display: block; width: 100%; min-width: 440px; height: auto; }
 .df text { font-family: var(--sans); fill: var(--ink); }
-.df .df-name { font-size: 16px; font-weight: 600; }
+.df .df-name { font: 600 16px var(--display); }
 .df .df-mono { font-family: var(--mono); font-size: 13px; fill: var(--ink-2); letter-spacing: .02em; }
-.df .df-line { fill: none; stroke: var(--ink-3); stroke-width: 1.4; }
+.df .df-line { fill: none; stroke: var(--ink-2); stroke-width: 1.4; }
 .df .df-ef { fill: none; stroke: var(--s2); stroke-width: 1.6; stroke-dasharray: 5 4; }
-.df .df-head { fill: var(--ink-3); }
+.df .df-head { fill: var(--ink-2); }
 .df .df-head-q { fill: var(--s2); }
-.df .df-box { fill: var(--panel); stroke: var(--ink-3); stroke-width: 1.2; }
-.df .df-q { fill: var(--panel); stroke: var(--s2); stroke-width: 2; }
+.df .df-box { fill: var(--panel-2); stroke: var(--bezel); stroke-width: 1.2; }
+.df .df-q { fill: var(--panel-2); stroke: var(--s2); stroke-width: 2; }
 .df .df-qt { fill: var(--s2); }
 .df .df-mask { fill: var(--panel); }
 
@@ -238,6 +238,20 @@ pre.code { max-height: 360px; overflow: auto; background: var(--panel-2); border
 .wave-read .nm { font: 12px var(--mono); color: var(--ink-2); }
 .btn[aria-disabled="true"] { opacity: .5; cursor: default; }
 
+
+/* layout polish */
+.hwrow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+@media (max-width: 1180px) { .hwrow { grid-template-columns: minmax(0, 1fr); } }
+details.more { margin-top: 10px; }
+details.more > summary { padding: 6px 0; cursor: pointer; }
+details.data > summary { color: var(--ink-2); }
+details.data > summary:hover { color: var(--ink); }
+.card-head h2 + .tag, .card-head .tag { white-space: normal; }
+@media (max-width: 480px) {
+  .app > .stage { order: 1; }          /* phones open on the plot; the controls follow it */
+  .app > .controls { order: 2; }
+  details.more > summary, details.data > summary { min-height: 40px; padding: 10px 0; }
+}
 </style>
 </head>
 <body>
@@ -1785,7 +1799,7 @@ function rtlCard(d) {
     <div class="tools play"><button class="btn" id="rtlCopy">Copy SystemVerilog</button><button class="btn" id="rtlDl">Download ${r.name}.sv</button><button class="btn" id="rtlTb">Download testbench and vectors</button></div>
     <p class="caption">A synthesizable SystemVerilog module whose arithmetic matches this tab's fixed-point simulation bit for bit: ${q.coef}-bit coefficients, a ${q.sig}-bit signal, ${q.overflow === 'wrap' ? 'wrap-around' : 'saturating'} overflow${d.kind === 'iir' ? `, ${q.headroom} bit${q.headroom === 1 ? '' : 's'} of headroom${q.ef ? ', error feedback' : ''}` : ''}.</p>
     <p class="caption">It assumes one clock, a synchronous active-high reset (<code>rst</code>), and one new sample per clock when <code>in_valid</code> is high. <code>out_data</code> and <code>out_valid</code> arrive one clock later. There is no pipelining, so the whole multiply-add chain must fit in one clock period.${d.kind === 'iir' ? ` The output is the cascade output: multiply it by ${fmtN(r.gain, 4)} (the leftover scaling gain${q.headroom ? ' times 2^' + q.headroom : ''}) downstream.` : ''}</p>
-    <p class="caption">No standard HDL simulator was available where this was built. The test suite runs the generated text through Filterlab's own evaluators and compares them with the bit-true simulator, and <b>Simulate hardware</b> below does the same in your browser; run the testbench with Icarus Verilog to check it with a standard tool.</p>
+    <details class="data more"><summary>How this was checked</summary><p class="caption">No standard HDL simulator was available where this was built. The test suite runs the generated text through Filterlab's own evaluators and compares them with the bit-true simulator, and <b>Simulate hardware</b> below does the same in your browser; run the testbench with Icarus Verilog to check it with a standard tool.</p></details>
     <div id="rtlCost"></div>
     <details class="data"><summary>Show the module</summary><pre class="code" id="rtlText"></pre></details></div>`;
 }
@@ -1894,7 +1908,7 @@ function rtlSimCard(d) {
     <div class="wave" id="rsimWave" tabindex="0" role="group" aria-label="Waveform. Left and right arrow keys move the cursor one clock; Home and End jump to the ends." aria-describedby="rsimRead"></div>
     <div class="wave-read num" id="rsimRead"></div>
     <p class="caption">Simulated in your browser by Filterlab's interpreter of the generated SystemVerilog. Not run in a standard HDL simulator, not synthesized.</p>
-    <p class="caption">The interpreter parses the module text above and runs it one clock at a time with SystemVerilog's signed-arithmetic and width rules; the bit-true model is this tab's fixed-point simulation. Both the interpreter and the generator were written for Filterlab, so agreement here is weaker evidence than a third-party simulator. Running the downloaded testbench in Icarus Verilog or another standard simulator closes that gap.</p>
+    <details class="data more"><summary>How the simulation works</summary><p class="caption">The interpreter parses the module text above and runs it one clock at a time with SystemVerilog's signed-arithmetic and width rules; the bit-true model is this tab's fixed-point simulation. Both the interpreter and the generator were written for Filterlab, so agreement here is weaker evidence than a third-party simulator. Running the downloaded testbench in Icarus Verilog or another standard simulator closes that gap.</p></details>
     <div id="rsimTable"></div></div>`;
 }
 function wireRtlSim(d) {
@@ -1934,12 +1948,12 @@ function renderQuant(d) {
       <label class="check"><input type="checkbox" id="qEF"${q.ef ? ' checked' : ''}> Error feedback <small class="unit">feeds each rounding error back through round(a₁), round(a₂)</small></label></div>` : ''}</div></div>
     <div class="grid2"><div class="col">
       <div class="panel card"><div class="card-head"><h2>Response, before and after rounding</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)', w: 3.5 }, { label: `Quantized, ${q.coef}-bit coefficients`, w: 1.6, color: 'var(--s2)' }])}<div class="chart" id="qMag"></div><p class="caption">Blue is the filter you designed. Orange is the same filter after every coefficient is rounded to ${q.coef} bits, which is what fixed-point hardware actually computes. Where orange crosses into the shaded area, rounding alone broke the spec.</p>${unstableMsg}</div>
-      <div class="panel card"><div class="card-head"><h2>Stopband attenuation against word length</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)', dash: true }, ...qa.sweep.map(s => ({ label: s.name, color: s.color, dash: s.dash }))])}<div class="chart" id="qSweep"></div><p class="caption">Each point rounds the same design to that many bits; nothing is redesigned. Fewer bits mean coarser steps and usually less stopband attenuation. ${sweepNote} The dotted marker is your current setting.</p><div id="qSweepT"></div></div></div>
-    <div class="col"><div class="panel card"><div class="card-head"><h2>Poles and zeros</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)' }, { label: 'Quantized', color: 'var(--s2)' }])}<div class="chart" id="qPZ"></div><p class="caption">Rounding moves poles and zeros. ${iir ? 'A pole that reaches the unit circle makes the filter ring forever or blow up; high-order direct form is far more sensitive than a cascade of biquads.' : 'An FIR filter has no poles to move, so it stays stable at any word length; only its zeros, and so its stopband, shift.'}</p></div>
-      ${iir && q.struct === 'sos' ? `<div class="panel card"><div class="card-head"><h2>Inside one biquad</h2></div>${dfDiagram(q.ef)}<p class="caption">Each section of the cascade rounds once, at Q. That rounding error (variance q²/12, with q one step of the ${q.sig}-bit signal) feeds back through −a₁ and −a₂, so the section's own poles amplify it before the later sections filter it.${q.ef ? ' Error feedback (dashed) subtracts round(a₁)·r[n−1] + round(a₂)·r[n−2] before rounding, which cancels most of that amplification when the poles sit near z = 1.' : ''}</p></div>` : ''}
-      ${rtlCard(d)}
-      ${rtlSimCard(d)}
-      <div class="panel card"><div class="card-head"><h2>Rounding effects</h2></div>${quantScore(d, qa)}<p class="caption">Coefficient rounding changes which filter you get. Round-off noise is separate: it is the error added every time the arithmetic rounds a result, measured here on a test signal and compared with theory.</p></div></div></div>`;
+      <div class="panel card"><div class="card-head"><h2>Stopband attenuation against word length</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)', dash: true }, ...qa.sweep.map(s => ({ label: s.name, color: s.color, dash: s.dash }))])}<div class="chart" id="qSweep"></div><p class="caption">Each point rounds the same design to that many bits; nothing is redesigned. Fewer bits mean coarser steps and usually less stopband attenuation. ${sweepNote} The dotted marker is your current setting.</p><div id="qSweepT"></div></div>
+      ${iir && q.struct === 'sos' ? `<div class="panel card"><div class="card-head"><h2>Inside one biquad</h2></div>${dfDiagram(q.ef)}<p class="caption">Each section of the cascade rounds once, at Q. That rounding error (variance q²/12, with q one step of the ${q.sig}-bit signal) feeds back through −a₁ and −a₂, so the section's own poles amplify it before the later sections filter it.${q.ef ? ' Error feedback (dashed) subtracts round(a₁)·r[n−1] + round(a₂)·r[n−2] before rounding, which cancels most of that amplification when the poles sit near z = 1.' : ''}</p></div>` : ''}</div>
+    <div class="col"><div class="panel card"><div class="card-head"><h2>Rounding effects</h2></div>${quantScore(d, qa)}<p class="caption">Coefficient rounding changes which filter you get. Round-off noise is separate: it is the error added every time the arithmetic rounds a result, measured here on a test signal and compared with theory.</p></div>
+      <div class="panel card"><div class="card-head"><h2>Poles and zeros</h2></div>${legend([{ label: 'Floating point', color: 'var(--s1)' }, { label: 'Quantized', color: 'var(--s2)' }])}<div class="chart" id="qPZ"></div><p class="caption">Rounding moves poles and zeros. ${iir ? 'A pole that reaches the unit circle makes the filter ring forever or blow up; high-order direct form is far more sensitive than a cascade of biquads.' : 'An FIR filter has no poles to move, so it stays stable at any word length; only its zeros, and so its stopband, shift.'}</p></div>
+</div></div>
+    <div class="hwrow">${rtlCard(d)}${rtlSimCard(d)}</div>`;
   $('#qRound').value = q.round; if (iir) $('#qStruct').value = q.struct;
   const upd = () => renderQuant(current);
   $('#qCoef').oninput = e => { q.coef = +e.target.value; upd(); focusRestore('qCoef'); }; $('#qSig').oninput = e => { q.sig = +e.target.value; upd(); focusRestore('qSig'); };
@@ -2012,15 +2026,15 @@ const miniIcon = bt => {
 };
 function buildControls() {
   $('#controls').innerHTML = `
-  <details class="grp" id="gMethod"><summary><h3>Method</h3><span class="sum" id="sumMethod"></span></summary><div class="method" role="radiogroup" aria-label="Design method">${Object.entries(METHODS).map(([k, m]) => `<label><input type="radio" name="method" value="${k}"><b>${m.name}</b><small>${m.note}</small></label>`).join('')}</div></details>
-  <details class="grp" open><summary><h3>Response type</h3><span class="sum" id="sumBtype"></span></summary><div class="seg" id="btype" role="group" aria-label="Response type">${Object.entries(BTYPES).map(([k, l]) => `<button data-v="${k}" aria-pressed="false">${miniIcon(k)}${l}</button>`).join('')}</div></details>
-  <details class="grp" open><summary><h3>Spec</h3><span class="sum"></span></summary>
+  <details class="grp" id="gMethod"><summary><h2>Method</h2><span class="sum" id="sumMethod"></span></summary><div class="method" role="radiogroup" aria-label="Design method">${Object.entries(METHODS).map(([k, m]) => `<label><input type="radio" name="method" value="${k}"><b>${m.name}</b><small>${m.note}</small></label>`).join('')}</div></details>
+  <details class="grp" open><summary><h2>Response type</h2><span class="sum" id="sumBtype"></span></summary><div class="seg" id="btype" role="group" aria-label="Response type">${Object.entries(BTYPES).map(([k, l]) => `<button data-v="${k}" aria-pressed="false">${miniIcon(k)}${l}</button>`).join('')}</div></details>
+  <details class="grp" open><summary><h2>Spec</h2><span class="sum"></span></summary>
     <div class="field"><label for="fs">Sample rate</label><span><input id="fs" type="number" min="100" step="100"></span></div>
     <div id="edgeFields"></div>
     <div class="field"><label for="rp">Passband ripple</label><span><input id="rp" type="number" min="0.01" max="6" step="any"></span></div>
     <div class="field"><label for="rs">Stopband attenuation</label><span><input id="rs" type="number" min="10" max="140" step="any"></span></div>
     <p class="hint">Frequencies in Hz, ripple and attenuation in dB.</p></details>
-  <details class="grp" id="gSize"><summary><h3>Size</h3><span class="sum" id="sumSize"></span></summary>
+  <details class="grp" id="gSize"><summary><h2>Size</h2><span class="sum" id="sumSize"></span></summary>
     <div class="field hidden" id="winRow"><label for="win">Window</label><select id="win">${Object.entries(WINDOWS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
     <div class="seg" id="omode" role="group" aria-label="Order selection"><button data-v="auto" aria-pressed="true">Pick for me</button><button data-v="manual" aria-pressed="false">Set it</button></div>
     <div class="field"><label for="ord" id="ordLab">Taps</label><span><input id="ord" type="number" min="1" step="1"></span></div>

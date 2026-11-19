@@ -80,3 +80,12 @@ Format: decision / why / rejected alternative.
   - the multiplicity label is offset and haloed, so it no longer collides with the × marker;
   - the pole-zero legend uses drawn SVG marks instead of unicode glyphs.
 - **UI task 4. Ideal and quantized differ without colour:** wherever both are overlaid (Quantization response, Signal spectra, first samples), the ideal trace is wide (3.5 px) and drawn underneath, and the quantized one is thin (1.6 px) on top; the legends show the same weights. The dataviz validator passes both themes against the new screen surfaces: CVD ΔE 24.7 light and 26.8 dark (target ≥ 8), normal-vision ΔE 33.6 and 31.8, contrast ≥ 3:1. Trace hues are unchanged.
+- **UI task 5. Quantization tab layout:**
+  - The plots column holds the response, the word-length sweep and (IIR) the biquad diagram.
+  - The side column leads with **Rounding effects** (the tab's result), then poles and zeros.
+  - Hardware export and Simulate hardware share a full-width row below, side by side above 1180 px.
+
+  This removes the 1,500 px dead column and puts a failing stopband at the top. Rejected: a readout strip under the sliders (it would duplicate the Rounding effects card).
+- **UI task 5. Long explanations fold into "How this was checked" / "How the simulation works".** Their wording is unchanged. The honesty tags ("Generated, not synthesized, not run in an HDL simulator", "Interpreted in your browser") and the simulator's plain label stay visible. Rejected: hiding any honesty wording.
+- **UI task 5. Phones open on the plot:** at ≤ 480 px the stage comes first and the design controls follow it, so a tab change visibly changes the screen. Rejected: a bottom sheet for the controls (new interaction code, and more risk than this pass should take).
+- **UI task 5. Control group titles are h2**, which fixes the detector's skipped heading level. The biquad diagram uses the new tokens (panel-well boxes, bezel strokes, DIN name) and keeps diagram-design's earlier rules: orthogonal connectors, masked labels, and two accents for Q and the error-feedback path.

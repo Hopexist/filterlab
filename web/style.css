@@ -45,7 +45,7 @@ input, select { accent-color: var(--accent); }
 .controls { padding: 6px 16px 16px; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
 .controls section { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .controls section:last-child { border-bottom: 0; }
-.controls h3 { font-size: 15px; margin-bottom: 10px; }
+.controls h2, .controls h3 { font-size: 15px; margin-bottom: 10px; }
 .method { display: grid; gap: 6px; }
 .method label { display: grid; grid-template-columns: 18px 1fr; gap: 0 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--r-sm); cursor: pointer; background: var(--panel); }
 .method label:hover { background: var(--panel-2); }
@@ -155,7 +155,7 @@ table.t th { color: var(--ink-3); font-weight: 500; }
 .controls .grp > summary::-webkit-details-marker { display: none; }
 .controls .grp > summary::before { content: ""; width: 7px; height: 7px; border-right: 1.6px solid var(--ink-3); border-bottom: 1.6px solid var(--ink-3); transform: rotate(-45deg); align-self: center; flex: none; }
 .controls .grp[open] > summary::before { transform: rotate(45deg); }
-.controls .grp > summary h3 { margin: 0; }
+.controls .grp > summary h2, .controls .grp > summary h3 { margin: 0; }
 .controls .grp > summary .sum { margin-left: auto; color: var(--ink-3); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
 .controls .grp[open] > summary .sum:empty, .controls .grp[open] > summary .sum { display: none; }
 .controls .grp > :not(summary) { margin-bottom: 10px; }
@@ -169,14 +169,14 @@ table.t th { color: var(--ink-3); font-weight: 500; }
 .df-wrap { overflow-x: auto; }
 .df { display: block; width: 100%; min-width: 440px; height: auto; }
 .df text { font-family: var(--sans); fill: var(--ink); }
-.df .df-name { font-size: 16px; font-weight: 600; }
+.df .df-name { font: 600 16px var(--display); }
 .df .df-mono { font-family: var(--mono); font-size: 13px; fill: var(--ink-2); letter-spacing: .02em; }
-.df .df-line { fill: none; stroke: var(--ink-3); stroke-width: 1.4; }
+.df .df-line { fill: none; stroke: var(--ink-2); stroke-width: 1.4; }
 .df .df-ef { fill: none; stroke: var(--s2); stroke-width: 1.6; stroke-dasharray: 5 4; }
-.df .df-head { fill: var(--ink-3); }
+.df .df-head { fill: var(--ink-2); }
 .df .df-head-q { fill: var(--s2); }
-.df .df-box { fill: var(--panel); stroke: var(--ink-3); stroke-width: 1.2; }
-.df .df-q { fill: var(--panel); stroke: var(--s2); stroke-width: 2; }
+.df .df-box { fill: var(--panel-2); stroke: var(--bezel); stroke-width: 1.2; }
+.df .df-q { fill: var(--panel-2); stroke: var(--s2); stroke-width: 2; }
 .df .df-qt { fill: var(--s2); }
 .df .df-mask { fill: var(--panel); }
 
@@ -232,3 +232,17 @@ pre.code { max-height: 360px; overflow: auto; background: var(--panel-2); border
 .wave-read .nm { font: 12px var(--mono); color: var(--ink-2); }
 .btn[aria-disabled="true"] { opacity: .5; cursor: default; }
 
+
+/* layout polish */
+.hwrow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+@media (max-width: 1180px) { .hwrow { grid-template-columns: minmax(0, 1fr); } }
+details.more { margin-top: 10px; }
+details.more > summary { padding: 6px 0; cursor: pointer; }
+details.data > summary { color: var(--ink-2); }
+details.data > summary:hover { color: var(--ink); }
+.card-head h2 + .tag, .card-head .tag { white-space: normal; }
+@media (max-width: 480px) {
+  .app > .stage { order: 1; }          /* phones open on the plot; the controls follow it */
+  .app > .controls { order: 2; }
+  details.more > summary, details.data > summary { min-height: 40px; padding: 10px 0; }
+}

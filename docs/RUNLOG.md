@@ -28,3 +28,27 @@
 
 - Start: 2026-11-19T19:54:00Z. Hard stop: 21:24:00Z. Branch `auto/ui-polish` from master e2ad9ac (auto/rtl-sim merged).
 - 20:16Z tasks 1-7 committed, gate green each time; stretch (demo clip) skipped: Remotion/HyperFrames not installed and npx needs the network. STATUS.md written. Run ends.
+
+# Run log: auto/ui-interactive
+
+- Start: 2026-11-19T21:31:37Z. Hard stop: 23:31:37Z. Branch `auto/ui-interactive` from master 2ec3ddb (auto/ui-polish merged).
+- Step 0, tool inventory (checked on disk under ~/.claude/plugins and against this session's skill list; nothing fetched or installed):
+
+  | Requested | Present? | Used for |
+  |---|---|---|
+  | impeccable | present | anti-pattern rules for the direction choice; detector at the end |
+  | ui-ux-pro-max | present | per-theme palette and type queries |
+  | fonthound | present (MCP) | not used to pick fonts: it needs the owner to pick by eye, and this run takes no questions |
+  | diagram-design | present | rules for the spec-sheet drawing (dimension lines, title block) |
+  | dataviz | present (bundled skill) | palette validator, per theme |
+  | frontend-design | **absent** | ecc's `frontend-design-direction` exists but is not that plugin; not used as a substitute |
+  | stageshow | **absent** | guided tour built by hand |
+  | dimensional-drawing | **absent** | spec sheet built by hand |
+  | oil-ui | **absent** | 3 directions built by hand |
+  | emilkowalski skills | **absent** | the brief's fallback motion rules apply |
+  | taste-skill | **absent** | ecc's `taste` exists but has no dials; the dials are applied by hand and logged |
+  | brand-identity | **absent** | current identity kept |
+  | awwwards MCP | **absent** | no references pulled |
+- No vendored anime.js or motion.dev in the repo, so motion uses CSS and the Web Animations API only.
+- 21:54Z steps 0-4 committed; full gate green; 36 shots reviewed.
+- 21:59Z stretch 3g committed; README and STATUS written; full gate green. Run ends.

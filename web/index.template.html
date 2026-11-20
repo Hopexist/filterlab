@@ -9,7 +9,7 @@
 <body>
 <header class="top">
   <div class="brand"><h1>Filterlab</h1><span id="subtitle">Digital filter design</span></div>
-  <div class="top-actions"><button class="btn" id="copyPy" title="Copy the Python call that reproduces this design">Copy Python</button><button class="btn" id="theme">Dark theme</button></div>
+  <div class="top-actions"><button class="btn" id="tourBtn" title="A six-step walkthrough (shortcut: G)">Take the tour</button><button class="btn" id="copyPy" title="Copy the Python call that reproduces this design">Copy Python</button><label class="vh" for="theme">Theme</label><select class="theme-pick" id="theme" title="Theme (shortcut: T)"><option value="light">Instrument, light</option><option value="dark">Instrument, dark</option><option value="swiss">Swiss</option><option value="phosphor">Phosphor</option><option value="paper">Paper</option></select><button class="btn icon" id="helpBtn" aria-label="Keyboard shortcuts" aria-keyshortcuts="?" title="Keyboard shortcuts (?)">?</button></div>
 </header>
 <main class="app">
   <aside class="panel controls" id="controls" aria-label="Filter design controls"></aside>
@@ -23,6 +23,29 @@
     <div id="view" role="tabpanel" aria-live="polite"></div>
   </section>
 </main>
+<dialog id="help" aria-labelledby="helpTitle">
+  <h2 id="helpTitle">Keyboard shortcuts</h2>
+  <table class="t keys"><tbody>
+    <tr><td><kbd>1</kbd> to <kbd>4</kbd></td><td>Response, Time and coefficients, Quantization, Signal tab</td></tr>
+    <tr><td><kbd>T</kbd></td><td>Next theme</td></tr>
+    <tr><td><kbd>S</kbd> / <kbd>R</kbd></td><td>Simulate hardware: step one clock / run to the end (Quantization tab)</td></tr>
+    <tr><td><kbd>G</kbd></td><td>Start the guided tour</td></tr>
+    <tr><td><kbd>D</kbd></td><td>Download the spec sheet drawing (SVG)</td></tr>
+    <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>On a focused Response plot: move the shared frequency cursor (<kbd>Shift</kbd> for bigger steps)</td></tr>
+    <tr><td><kbd>?</kbd></td><td>This list. <kbd>Esc</kbd> closes it.</td></tr>
+  </tbody></table>
+  <p class="hint">Shortcuts are off while you type in a field.</p>
+  <form method="dialog"><button class="btn" autofocus>Close</button></form>
+</dialog>
+<div id="tour" class="tour" role="dialog" aria-modal="false" aria-labelledby="tourTitle" hidden>
+  <div class="tour-ring" aria-hidden="true"></div>
+  <div class="tour-card">
+    <p class="tour-step" id="tourStep"></p>
+    <h2 id="tourTitle" tabindex="-1"></h2>
+    <p id="tourText"></p>
+    <div class="tour-nav"><button class="btn" id="tourSkip">Skip tour</button><span></span><button class="btn" id="tourBack">Back</button><button class="btn primary" id="tourNext">Next</button></div>
+  </div>
+</div>
 <script>/*DSP*/</script>
 <script>/*RTL*/</script>
 <script>/*RTLSIM*/</script>

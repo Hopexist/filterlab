@@ -94,6 +94,12 @@ async function launch({ width = 1440, height = 1000 } = {}) {
     wait: sleep,
     async setViewport(w, h) { await s('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false }); },
     async setScheme(scheme) { await s('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] }); },
+    async press(key, { shift = false } = {}) {   // a real key press through the DevTools input pipeline (keyDown + keyUp)
+      const codes = { Enter: 13, Escape: 27, Tab: 9, ArrowLeft: 37, ArrowRight: 39, ' ': 32, '?': 191 }, vk = codes[key] || key.toUpperCase().charCodeAt(0);
+      const text = key === 'Enter' ? String.fromCharCode(13) : key.length === 1 ? key : undefined, base = { key, windowsVirtualKeyCode: vk, modifiers: shift ? 8 : 0 };
+      await s('Input.dispatchKeyEvent', { type: text ? 'keyDown' : 'rawKeyDown', text, ...base }); await s('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+    },
+    async setMotion(value) { await s('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value }] }); },   // 'reduce' or 'no-preference'
     async goto(u) { const load = waitFor(sid, 'Page.loadEventFired'); await s('Page.navigate', { url: u }); await load; },
     async evaluate(fn, ...args) {
       const expression = typeof fn === 'function' ? `(${fn})(...${JSON.stringify(args)})` : fn;

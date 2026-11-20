@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "dark-glow",
+        "value": "*",
+        "files": [
+          "web/index.html"
+        ],
+        "createdAt": "2026-11-20T01:41:16.834Z",
+        "reason": "Owner requested Synthwave, Phosphor/oscilloscope and Luxury themes by name; the glow lives only in those opt-in themes (default Instrument theme has none)"
+      },
+      {
+        "rule": "radial-halo",
+        "value": "*",
+        "files": [
+          "web/index.html"
+        ],
+        "createdAt": "2026-11-20T01:41:17.047Z",
+        "reason": "Owner requested Glassmorphism by name; the radial wash is that opt-in theme's background (default Instrument theme has none)"
+      }
+    ]
+  }
+}

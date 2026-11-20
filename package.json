@@ -5,6 +5,7 @@
   "description": "Digital filter design toolkit: numpy library plus a self-contained web app",
   "scripts": {
     "build": "node run_tests.js build",
+    "site": "node run_tests.js site",
     "test:py": "node run_tests.js py",
     "test:js": "node run_tests.js js",
     "test:ui": "node run_tests.js ui",

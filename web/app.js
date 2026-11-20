@@ -830,8 +830,8 @@ function specSheetSvg(d, st) {
   const arrow = (x1, y1, x2, y2, label, lx, ly, anchor = 'middle') => `<line class="dim" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" marker-start="url(#ar)" marker-end="url(#ar)"/><text class="dimt" x="${lx}" y="${ly}" text-anchor="${anchor}">${e(label)}</text>`;
   let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Bahnschrift, 'DIN Alternate', Arial, sans-serif">
 <title>Filterlab spec sheet: ${e(d.title)}</title>
-<style>.frame{fill:none;stroke:#111;stroke-width:1.5}.grid{stroke:#d8dcd9;stroke-width:1}.trace{fill:none;stroke:#2a78d6;stroke-width:2}.lim{stroke:#c23a39;stroke-width:1.2;stroke-dasharray:6 4}
-.dim{stroke:#111;stroke-width:1}.ext{stroke:#111;stroke-width:.7;stroke-dasharray:2 3}.dimt{font-size:13px;fill:#111}.tick{font-size:11px;fill:#444}.tb{fill:none;stroke:#111;stroke-width:1.2}.tbl{font-size:11px;fill:#555}.tbv{font-size:14px;fill:#111}.h{font-size:20px;font-weight:700;fill:#111}.ok{fill:#0b7a3b}.no{fill:#c23a39}</style>
+<style>.frame{fill:none;stroke:#111;stroke-width:1.5}.grid{stroke:#d8dcd9;stroke-width:1}.trace{fill:none;stroke:#111;stroke-width:1.6}.lim{stroke:#777;stroke-width:1;stroke-dasharray:6 4}
+.dim{stroke:#111;stroke-width:1}.ext{stroke:#111;stroke-width:.7;stroke-dasharray:2 3}.dimt{font-size:13px;fill:#111}.tick{font-size:11px;fill:#444}.tb{fill:none;stroke:#111;stroke-width:1.2}.tbl{font-size:11px;fill:#555}.tbv{font-size:14px;fill:#111}.h{font-size:20px;font-weight:700;fill:#111}.ok{fill:#111;font-weight:700}.no{fill:#111;font-weight:700;text-decoration:underline}.cap{font-size:11px;fill:#111;letter-spacing:.08em}</style>
 <defs><marker id="ar" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9Z" fill="#111"/></marker></defs>
 <rect x="1" y="1" width="${W - 2}" height="${H - 2}" fill="#fff" stroke="#111" stroke-width="2"/>
 <text class="h" x="${P.l}" y="34">Magnitude response, ${e(d.title)}</text>`;
@@ -857,7 +857,7 @@ function specSheetSvg(d, st) {
   rowsR.forEach(([k, v, sub, ok], i) => { const x = tx + iw / 2 + 12, y = ty + i * 52; s += `<text class="tbl" x="${x}" y="${y}">${e(k)}</text><text class="tbv" x="${x + 170}" y="${y}">${e(v)}</text><text class="${ok ? 'ok' : 'no'}" font-size="13" x="${x + 290}" y="${y}">${ok ? '✓ meets' : '✕ misses'}</text><text class="tbl" x="${x}" y="${y + 18}">${e(sub)}</text>`; });
   s += `<text class="tbl" x="${tx + iw / 2 + 12}" y="${ty + 116}">Measured by Filterlab's spec check on the design's computed response.</text>
 <text class="tbl" x="${tx + iw / 2 + 12}" y="${ty + 134}">Floating-point design; see the Quantization tab for fixed-point effects.</text>
-<text class="tbl" x="${tx + 12}" y="${ty + 156}">Filterlab spec sheet · generated ${e(new Date().toISOString().slice(0, 10))} · dimensions in Hz and dB</text>
+<text class="cap" x="${tx + 12}" y="${ty + 156}">DWG NO. FL-${e(d.kind.toUpperCase())}-001 · REV A · SCALE NTS · HZ, DB · ${e(new Date().toISOString().slice(0, 10))}</text>
 </svg>`;
   return s;
 }
@@ -943,7 +943,10 @@ function wireTour() {
   addEventListener('resize', () => { if (tourAt >= 0) tourGo(tourAt); });
 }
 /* ---------- themes: Instrument light/dark, Swiss, Phosphor, Paper; the choice is remembered per viewer ---------- */
-const THEMES = ['light', 'dark', 'swiss', 'phosphor', 'paper'];
+const THEME_LIST = [['light', 'Instrument, light'], ['dark', 'Instrument, dark'], ['swiss', 'Swiss'], ['phosphor', 'Phosphor'], ['paper', 'Paper (wabi-sabi)'],
+  ['synthwave', 'Synthwave'], ['cyberpunk', 'Cyberpunk'], ['neobrutal', 'Neo-brutalism'], ['editorial', 'Editorial'], ['luxury', 'Luxury typography'],
+  ['glass', 'Glassmorphism'], ['clay', 'Claymorphism'], ['y2k', 'Y2K'], ['sketch', 'Conceptual sketch'], ['pixel', 'Pixel art'], ['neumorph', 'Neumorphism']];
+const THEMES = THEME_LIST.map(t => t[0]);
 function storedTheme() { try { const t = localStorage.getItem('filterlab.theme'); return THEMES.includes(t) ? t : null; } catch (e) { return null; } }
 function setTheme(t, remember) {
   if (!THEMES.includes(t)) t = 'light';
@@ -1076,14 +1079,18 @@ function render() {
 }
 
 function init() {
-  setTheme(storedTheme() || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), false);
+  $('#theme').innerHTML = THEME_LIST.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  const qs = new URLSearchParams(location.search);   // deep links from the landing page: ?theme=…&tab=…
+  if (['response', 'time', 'quant', 'signal'].includes(qs.get('tab'))) state.tab = qs.get('tab');
+  setTheme(THEMES.includes(qs.get('theme')) ? qs.get('theme') : storedTheme() || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), false);
   $('#theme').addEventListener('change', e => setTheme(e.target.value, true));
   document.addEventListener('toggle', e => { const el = e.target; if (el.tagName === 'DETAILS' && el.open) { el.classList.add('opening'); setTimeout(() => el.classList.remove('opening'), 200); } }, true);
   addEventListener('keydown', shortcuts); $('#helpBtn').addEventListener('click', openHelp); wireTour();
   $('#copyPy').addEventListener('click', () => current && copy(pythonSnippet(current)));
-  $$('.tabs button').forEach(b => b.addEventListener('click', () => {
+  $$('.tabs button').forEach(b => b.addEventListener('click', ev => {
     if (state.tab === b.dataset.tab) return;
     state.tab = b.dataset.tab; render();
+    if (ev.detail === 0) return;   // keyboard-initiated: no motion (frequent action)
     const v = $('#view'); v.classList.toggle('enter', false); void v.offsetWidth; v.classList.add('enter');   // a short fade answers the tab change (CSS skips it under reduced motion)
   }));
   buildControls(); syncControls();

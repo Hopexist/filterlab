@@ -4,6 +4,8 @@ A digital filter design bench that runs in the browser. Design FIR and IIR filte
 
 ![Quantization tab, dark theme: the quantized response (thin, orange) over the ideal one (wide, blue), rounding effects, word-length sweep](docs/screenshots/quantization-dark.png)
 
+**Try it live:** [hopexist.github.io/filterlab](https://hopexist.github.io/filterlab/) (landing page) · [the app](https://hopexist.github.io/filterlab/app/)
+
 ## What it does
 
 **Design**
@@ -28,7 +30,7 @@ A digital filter design bench that runs in the browser. Design FIR and IIR filte
 
 Open `web/index.html` in a browser. It is one self-contained file: nothing to install, and no network needed.
 
-After editing anything in `web/` (`dsp.js`, `rtl.js`, `rtlsim.js`, `app.js`, `style.css`, `index.template.html`), rebuild the page with `npm run build` (or `python web/build.py`); `web/index.html` is generated, so do not edit it by hand. To view it in VS Code's Simple Browser, run `npm run serve` (it needs Python) and open `http://localhost:8000/`. On Windows PowerShell, if scripts are blocked, use `npm.cmd run ...`.
+After editing anything in `web/` (`dsp.js`, `rtl.js`, `rtlsim.js`, `app.js`, `style.css`, `index.template.html`), rebuild the page with `npm run build` (or `python web/build.py`); `web/index.html` is generated, so do not edit it by hand. The GitHub Pages site is built into `docs/`: `docs/index.html` is the landing page (source `web/site/index.html`) and `docs/app/index.html` is a copy of the app. `npm run site` rebuilds both and refreshes the landing page screenshots in `docs/assets/` (needs Edge or Chrome, and ffmpeg). To view it in VS Code's Simple Browser, run `npm run serve` (it needs Python) and open `http://localhost:8000/`. On Windows PowerShell, if scripts are blocked, use `npm.cmd run ...`.
 
 ## How it was checked
 
@@ -139,7 +141,7 @@ weight as well as colour. The design notes are in [docs/ui-design.md](docs/ui-de
 **Interacting with it.**
 - Hovering any Response plot shows the same frequency on magnitude, phase and the pole-zero plot (the point e^jω on the unit circle).
 - Dragging a word-length or order slider redraws live, with the previous trace left faint behind the new one.
-- Five themes are in the header (Instrument light and dark, Swiss, Phosphor, Paper), and your choice is remembered.
+- Sixteen themes are in the header, from Instrument (light and dark) to Synthwave, Neo-brutalism, Glassmorphism and Pixel art. Every one keeps the plots on a solid, high-contrast screen, and your choice is remembered. `?theme=synthwave&tab=quant` opens the app in a given theme and tab.
 - Keyboard: `1`-`4` switch tabs, `T` changes theme, `S`/`R` step or run the hardware simulator, `G` starts a six-step guided tour (it never starts on its own), `D` downloads a spec-sheet drawing (SVG) with dimension lines and the spec check, and `?` lists the shortcuts.
 - "Explore: drag poles and zeros" lets you move a copy of the roots and see a dashed what-if response. It is labelled as exploration and never changes the design or its spec check.
 - With reduced motion set in your system, nothing animates.

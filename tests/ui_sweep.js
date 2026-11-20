@@ -99,10 +99,24 @@ const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
     console.log('desktop overflow check done (remez, cheby1 x 4 tabs)');
 
     // themes: each applies, is remembered across a reload, keeps every tab free of sideways scroll at 1440 and 390 px
-    for (const t of ['swiss', 'phosphor', 'paper', 'dark', 'light']) {
+    const allThemes = await p.evaluate(() => [...document.getElementById('theme').options].map(o => o.value));
+    if (allThemes.length < 16) problems.push(`expected at least 16 themes, found ${allThemes.length}`);
+    for (const t of [...allThemes.filter(x => x !== 'light'), 'light']) {
       await p.evaluate(t => { const s = document.getElementById('theme'); s.value = t; s.dispatchEvent(new Event('change')); }, t);
       await p.goto(fileUrl('web/index.html')); await p.wait(500);
       const got = await p.evaluate(() => document.documentElement.dataset.theme);
+      // AA text contrast from the theme's own tokens (translucent panels are blended over the page colour)
+      const cr = await p.evaluate(() => {
+        const css = getComputedStyle(document.documentElement), tok = n => css.getPropertyValue(n).trim(), cv = document.createElement('canvas').getContext('2d');
+        const rgba = c => { cv.fillStyle = '#000'; cv.fillStyle = c; const h = cv.fillStyle; if (h.startsWith('#')) return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)).concat(1); const m = h.match(/[\d.]+/g).map(Number); return [m[0], m[1], m[2], m[3] ?? 1]; };
+        const over = (fg, bg) => fg.slice(0, 3).map((v, i) => v * fg[3] + bg[i] * (1 - fg[3])).concat(1);
+        const L = c => { const [r, g, b] = c.slice(0, 3).map(v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }); return .2126 * r + .7152 * g + .0722 * b; };
+        const ratio = (a, b) => { const x = L(a), y = L(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
+        const bg = rgba(tok('--bg')), panel = over(rgba(tok('--panel')), bg), screen = over(rgba(tok('--screen')), bg), out = {};
+        for (const n of ['--ink', '--ink-2', '--ink-3']) out[n] = Math.min(ratio(over(rgba(tok(n)), panel), panel), ratio(over(rgba(tok(n)), bg), bg));
+        for (const n of ['--s1', '--s2']) out[n] = ratio(rgba(tok(n)), screen);
+        return out; });
+      for (const [n, v] of Object.entries(cr)) if (!Number.isFinite(v) || v < (n.startsWith('--s') ? 3 : 4.5)) problems.push(`theme ${t}: ${n} contrast ${v.toFixed(2)}:1 is below ${n.startsWith('--s') ? '3' : '4.5'}:1`);
       if (got !== t) problems.push(`theme ${t} was not remembered across a reload (got ${got})`);
       for (const [w, h] of [[1440, 1000], [390, 844]]) {
         await p.setViewport(w, h);
@@ -114,7 +128,7 @@ const BTYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
       }
       await p.setViewport(1440, 1000);
     }
-    console.log('themes: 5 applied, remembered, no sideways scroll');
+    console.log(`themes: ${allThemes.length} applied, remembered, AA text contrast, no sideways scroll`);
 
     // hardware export card: present for FIR and IIR, honest label, text matches web/rtl.js for the shown settings
     for (const method of ['remez', 'cheby1']) {

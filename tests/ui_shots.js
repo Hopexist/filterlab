@@ -19,12 +19,14 @@ const SHOTS = path.resolve(__dirname, '..', 'shots');
           if (w < 500) { await p.evaluate(() => window.scrollTo(0, 0)); await p.screenshot(path.join(SHOTS, `${scheme}-${w}-${tab}-viewport.png`), { fullPage: false }); n++; }
         }
       }
-    // the three extra themes (each is light-only or dark-only by design), response and quantization, both widths
+    // every extra theme (each is light-only or dark-only by design), response and quantization, both widths
+    await p.goto(fileUrl('web/index.html')); await p.wait(400);
+    const extra = await p.evaluate(() => [...document.getElementById('theme').options].map(o => o.value).filter(v => v !== 'light' && v !== 'dark'));
     for (const [w, h] of [[1440, 1000], [390, 844]])
-      for (const t of ['swiss', 'phosphor', 'paper']) {
+      for (const t of extra) {
         await p.setViewport(w, h); await p.goto(fileUrl('web/index.html')); await p.wait(500);
         await p.evaluate(t => { const s = document.getElementById('theme'); s.value = t; s.dispatchEvent(new Event('change')); }, t);
-        for (const tab of ['response', 'quant']) { await p.click(`[data-tab=${tab}]`); await p.wait(350); await p.screenshot(path.join(SHOTS, `theme-${t}-${w}-${tab}.png`), { fullPage: w > 500 }); n++; }
+        for (const tab of w > 500 ? ['response', 'quant'] : ['response']) { await p.click(`[data-tab=${tab}]`); await p.wait(350); await p.screenshot(path.join(SHOTS, `theme-${t}-${w}-${tab}.png`), { fullPage: w > 500 }); n++; }
       }
     await p.evaluate(() => { try { localStorage.removeItem('filterlab.theme'); } catch (e) { /* ignore */ } });
   } catch (e) {

@@ -166,3 +166,21 @@ Format: decision / why / rejected alternative.
 
   Impeccable's detector: file and 1440×1000 clean. At 390×844 it still reports the segmented-control "nested cards" false positive from the last run.
 - **Impeccable design hook: flat-type-hierarchy.** Card titles were 16 px over 14 px body (1.14x). Raised to 18 px (1.29x). Screenshots checked at 1440 and 390 px; the full gate passes.
+
+## Portfolio run (auto/portfolio)
+
+- **Third-party skills were read as text, never run.** StageShow (benji.org, a website, no repo), Dimensional Drawing, Oil UI, Emil Kowalski's skills, Taste skill and Brand Identity were shallow-cloned into the scratchpad and their SKILL.md files read as guidance. Nothing was installed, and none of their scripts or hooks ran.
+  - The Awwwards MCP repo (`INSANE0777/Awwwards`) returned "not found", so no references were pulled.
+  - Figma needs a sign-in in this session, and Manus is a separate agent service; neither was used.
+  - anime.js / Motion were not added: Emil's own rule is "cheapest tool that works", and CSS plus WAAPI cover every animation here, so the app stays dependency-free and offline.
+- **Themes: 11 added, 16 in total.** Synthwave, Cyberpunk (also covers Cybercore), Neo-brutalism, Editorial, Luxury typography, Glassmorphism, Claymorphism, Y2K, Conceptual sketch, Pixel art and Neumorphism, alongside Instrument light/dark, Swiss (also covers Minimalism) and Paper (Wabi-sabi).
+  - Rule for every theme: the frame carries the style, and the plot screens stay solid with a validated trace pair.
+  - Neumorphism and Pixel art were refused last run for legibility. They now ship under that rule, as the owner asked for them.
+  - Not built, logged as "later": Maximalism, Surrealism, Scrapbook, Ethereal, Bohemian, Victorian. Bento grid is a layout, not a theme, and is used on the landing page.
+- **Theme checks.**
+  - The dataviz validator passes each theme's trace pair on its own screen.
+  - `ui_sweep` now loops over every theme in the switcher and computes AA text contrast from the live tokens (translucent panels blended over the page; it also fails on a value it cannot compute).
+  - `ui_shots` captures every theme.
+  - Glassmorphism's frosted buttons first hid the selected-segment state; fixed.
+- **Emil's frequency rule applied:** a tab switch from the keyboard (1-4) no longer animates, while a pointer click keeps the short fade.
+- **Deep links:** `?theme=` and `?tab=`, so the landing page can open the app in a given theme or tab.

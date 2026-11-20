@@ -943,7 +943,10 @@ function wireTour() {
   addEventListener('resize', () => { if (tourAt >= 0) tourGo(tourAt); });
 }
 /* ---------- themes: Instrument light/dark, Swiss, Phosphor, Paper; the choice is remembered per viewer ---------- */
-const THEMES = ['light', 'dark', 'swiss', 'phosphor', 'paper'];
+const THEME_LIST = [['light', 'Instrument, light'], ['dark', 'Instrument, dark'], ['swiss', 'Swiss'], ['phosphor', 'Phosphor'], ['paper', 'Paper (wabi-sabi)'],
+  ['synthwave', 'Synthwave'], ['cyberpunk', 'Cyberpunk'], ['neobrutal', 'Neo-brutalism'], ['editorial', 'Editorial'], ['luxury', 'Luxury typography'],
+  ['glass', 'Glassmorphism'], ['clay', 'Claymorphism'], ['y2k', 'Y2K'], ['sketch', 'Conceptual sketch'], ['pixel', 'Pixel art'], ['neumorph', 'Neumorphism']];
+const THEMES = THEME_LIST.map(t => t[0]);
 function storedTheme() { try { const t = localStorage.getItem('filterlab.theme'); return THEMES.includes(t) ? t : null; } catch (e) { return null; } }
 function setTheme(t, remember) {
   if (!THEMES.includes(t)) t = 'light';
@@ -1076,14 +1079,18 @@ function render() {
 }
 
 function init() {
-  setTheme(storedTheme() || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), false);
+  $('#theme').innerHTML = THEME_LIST.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  const qs = new URLSearchParams(location.search);   // deep links from the landing page: ?theme=…&tab=…
+  if (['response', 'time', 'quant', 'signal'].includes(qs.get('tab'))) state.tab = qs.get('tab');
+  setTheme(THEMES.includes(qs.get('theme')) ? qs.get('theme') : storedTheme() || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), false);
   $('#theme').addEventListener('change', e => setTheme(e.target.value, true));
   document.addEventListener('toggle', e => { const el = e.target; if (el.tagName === 'DETAILS' && el.open) { el.classList.add('opening'); setTimeout(() => el.classList.remove('opening'), 200); } }, true);
   addEventListener('keydown', shortcuts); $('#helpBtn').addEventListener('click', openHelp); wireTour();
   $('#copyPy').addEventListener('click', () => current && copy(pythonSnippet(current)));
-  $$('.tabs button').forEach(b => b.addEventListener('click', () => {
+  $$('.tabs button').forEach(b => b.addEventListener('click', ev => {
     if (state.tab === b.dataset.tab) return;
     state.tab = b.dataset.tab; render();
+    if (ev.detail === 0) return;   // keyboard-initiated: no motion (frequent action)
     const v = $('#view'); v.classList.toggle('enter', false); void v.offsetWidth; v.classList.add('enter');   // a short fade answers the tab change (CSS skips it under reduced motion)
   }));
   buildControls(); syncControls();

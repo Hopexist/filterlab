@@ -73,6 +73,171 @@
 :root[data-theme="paper"] .chart .grid line { stroke-dasharray: 1 3; }
 :root[data-theme="paper"] .score .val, :root[data-theme="paper"] .slider .big { font-weight: 400; }
 
+/* ---- portfolio themes. Rule for all of them: the frame carries the style, the plot screens stay solid and high-contrast ---- */
+
+/* Synthwave (dark): sunset grid horizon behind a violet panel, glowing traces */
+:root[data-theme="synthwave"] {
+  color-scheme: dark;
+  --bg: #120a24; --panel: #1b1033; --panel-2: #241543; --screen: #0d0620; --bezel: #ff4fd8;
+  --ink: #f5e9ff; --ink-2: #d4c0ee; --ink-3: #b49ad6;
+  --line: #3a2263; --grid: #2c1650; --grid-2: #1a0c33; --accent: #ff6be0; --accent-ink: #1a0326; --accent-soft: #3a1650;
+  --cmp: #d4c0ee;
+  --s1: #3d8ef5; --s2: #e2661e; --good: #5ef0a8; --bad: #ff7a90; --shade: rgba(255, 122, 144, .07); --shade-line: rgba(255, 122, 144, .55);
+  --display: Bahnschrift, "DIN Alternate", system-ui, sans-serif;
+}
+:root[data-theme="synthwave"] body { background:
+  linear-gradient(180deg, #120a24 0%, #1d0b3a 55%, #3b0f4d 78%, #5a1544 100%) fixed; }
+:root[data-theme="synthwave"] .chart .trace, :root[data-theme="synthwave"] .wave .wtr { filter: drop-shadow(0 0 3px currentColor); }
+:root[data-theme="synthwave"] .brand h1 { color: var(--accent); text-shadow: 0 0 12px rgba(255, 107, 224, .55); font-style: italic; }
+
+/* Cyberpunk (dark): signal yellow on near-black, chamfered panels */
+:root[data-theme="cyberpunk"] {
+  color-scheme: dark;
+  --bg: #0a0a0f; --panel: #13131b; --panel-2: #1b1b26; --screen: #050508; --bezel: #fcee0a;
+  --ink: #eef8ff; --ink-2: #b9c8d4; --ink-3: #93a3b0;
+  --line: #2a2a38; --grid: #1a1f2a; --grid-2: #0e1118; --accent: #fcee0a; --accent-ink: #0a0a0f; --accent-soft: #2e2b08;
+  --cmp: #b9c8d4;
+  --s1: #3d8ef5; --s2: #e2661e; --good: #39f39f; --bad: #ff5c7a; --shade: rgba(255, 92, 122, .07); --shade-line: rgba(255, 92, 122, .55);
+  --display: Bahnschrift, "DIN Alternate", system-ui, sans-serif; --r: 0px; --r-sm: 0px;
+}
+:root[data-theme="cyberpunk"] .panel { clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px)); border-color: #3a3a4c; }
+:root[data-theme="cyberpunk"] .card-head h2, :root[data-theme="cyberpunk"] .controls h2 { text-transform: uppercase; letter-spacing: .06em; }
+:root[data-theme="cyberpunk"] .brand h1 { color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+
+/* Neo-Brutalism (light): thick black outlines, hard offset shadows, flat signal colours */
+:root[data-theme="neobrutal"] {
+  color-scheme: light;
+  --bg: #f1f1ec; --panel: #ffffff; --panel-2: #f6f6f1; --screen: #ffffff; --bezel: #000000;
+  --ink: #000000; --ink-2: #262626; --ink-3: #4a4a4a;
+  --line: #000000; --grid: #e2e2dc; --grid-2: #f1f1ec; --accent: #ffd400; --accent-ink: #000000; --accent-soft: #fff1a6;
+  --cmp: #4a4a4a;
+  --s1: #2a78d6; --s2: #e0592a; --good: #0b7a3b; --bad: #c4262e; --shade: rgba(196, 38, 46, .06); --shade-line: rgba(196, 38, 46, .6);
+  --display: "Arial Black", "Segoe UI Black", Arial, system-ui, sans-serif; --r: 0px; --r-sm: 0px;
+}
+:root[data-theme="neobrutal"] .panel { border: 2.5px solid #000; box-shadow: 5px 5px 0 #000; }
+:root[data-theme="neobrutal"] .btn, :root[data-theme="neobrutal"] .seg, :root[data-theme="neobrutal"] .field input, :root[data-theme="neobrutal"] .field select, :root[data-theme="neobrutal"] .theme-pick { border: 2px solid #000; box-shadow: 2px 2px 0 #000; }
+:root[data-theme="neobrutal"] .seg button[aria-pressed="true"], :root[data-theme="neobrutal"] .btn.primary { color: #000; }
+:root[data-theme="neobrutal"] .chart .frame { stroke-width: 2.5; }
+
+/* Editorial (light): magazine page, serif display, hairline rules instead of cards */
+:root[data-theme="editorial"] {
+  color-scheme: light;
+  --bg: #f7f5f0; --panel: #f7f5f0; --panel-2: #efece4; --screen: #ffffff; --bezel: #1c1a17;
+  --ink: #1c1a17; --ink-2: #48433b; --ink-3: #635d52;
+  --line: #cfc9bc; --grid: #e7e2d7; --grid-2: #f3f0e9; --accent: #9b2c1f; --accent-ink: #ffffff; --accent-soft: #f1ddd8;
+  --cmp: #635d52;
+  --s1: #2a6fc4; --s2: #c8551f; --good: #2f6b34; --bad: #a8352c; --shade: rgba(168, 53, 44, .05); --shade-line: rgba(168, 53, 44, .5);
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif; --r: 0px; --r-sm: 0px;
+}
+:root[data-theme="editorial"] .panel { border: 0; border-top: 1px solid var(--ink); }
+:root[data-theme="editorial"] .card-head h2 { font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
+:root[data-theme="editorial"] .brand h1 { font-size: 34px; font-weight: 600; font-style: italic; }
+:root[data-theme="editorial"] .caption { font-family: var(--display); font-size: 15px; }
+
+/* Luxury Typography (dark): ink black, gold hairlines, high-contrast serif */
+:root[data-theme="luxury"] {
+  color-scheme: dark;
+  --bg: #0b0b0c; --panel: #121214; --panel-2: #19191c; --screen: #070708; --bezel: #b8955a;
+  --ink: #efe9dd; --ink-2: #c9c1b2; --ink-3: #a59c8c;
+  --line: #2c2a27; --grid: #1d1c1a; --grid-2: #121211; --accent: #d1ad6b; --accent-ink: #0b0b0c; --accent-soft: #2a2418;
+  --cmp: #c9c1b2;
+  --s1: #3d8ef5; --s2: #e2661e; --good: #7fd19b; --bad: #f08a8a; --shade: rgba(240, 138, 138, .06); --shade-line: rgba(240, 138, 138, .5);
+  --display: "Bodoni MT", Didot, "Didot LT STD", "Playfair Display", "Times New Roman", serif; --r: 0px; --r-sm: 0px;
+}
+:root[data-theme="luxury"] .panel { border-color: #2c2a27; }
+:root[data-theme="luxury"] .card-head h2, :root[data-theme="luxury"] .controls h2 { font-weight: 400; letter-spacing: .04em; }
+:root[data-theme="luxury"] .brand h1 { font-weight: 400; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+:root[data-theme="luxury"] .score .val, :root[data-theme="luxury"] .slider .big { font-weight: 400; }
+
+/* Glassmorphism (dark): frosted panels over a colour field; the plot screens stay solid */
+:root[data-theme="glass"] {
+  color-scheme: dark;
+  --bg: #0d1424; --panel: rgba(255, 255, 255, .07); --panel-2: rgba(255, 255, 255, .1); --screen: #0b1220; --bezel: rgba(255, 255, 255, .35);
+  --ink: #f2f6ff; --ink-2: #c8d3ea; --ink-3: #a5b3cf;
+  --line: rgba(255, 255, 255, .16); --grid: #1b2638; --grid-2: #121b2b; --accent: #8fd0ff; --accent-ink: #07111f; --accent-soft: rgba(143, 208, 255, .18);
+  --cmp: #c8d3ea;
+  --s1: #3d8ef5; --s2: #e2661e; --good: #6ee7a8; --bad: #ff8a9a; --shade: rgba(255, 138, 154, .07); --shade-line: rgba(255, 138, 154, .55);
+  --r: 14px; --r-sm: 8px;
+}
+:root[data-theme="glass"] body { background:
+  radial-gradient(60vw 50vh at 10% 0%, #3b2a8a 0%, transparent 60%), radial-gradient(50vw 50vh at 100% 20%, #0f6d8a 0%, transparent 60%),
+  radial-gradient(60vw 60vh at 50% 100%, #6a1f63 0%, transparent 60%), #0d1424 fixed; }
+:root[data-theme="glass"] .panel { backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3); box-shadow: 0 8px 32px rgba(0, 0, 0, .25), inset 0 1px 0 rgba(255, 255, 255, .12); }
+:root[data-theme="glass"] .tabs button[aria-selected="true"] { color: #fff; }
+:root[data-theme="glass"] .field input, :root[data-theme="glass"] .field select, :root[data-theme="glass"] .btn, :root[data-theme="glass"] .theme-pick, :root[data-theme="glass"] .seg button:not([aria-pressed="true"]) { background: rgba(255, 255, 255, .06); }
+:root[data-theme="glass"] select option { background: #0d1424; }
+
+/* Claymorphism (light): soft puffy shapes, big radii, inner highlight; plot screens flat */
+:root[data-theme="clay"] {
+  color-scheme: light;
+  --bg: #e9e4f5; --panel: #f6f2ff; --panel-2: #ece6fb; --screen: #ffffff; --bezel: #c9bfe6;
+  --ink: #2a2440; --ink-2: #4e4766; --ink-3: #655d80;
+  --line: #ddd5f2; --grid: #ebe6f7; --grid-2: #f6f3fc; --accent: #6b4fd8; --accent-ink: #ffffff; --accent-soft: #e2dafb;
+  --cmp: #655d80;
+  --s1: #2a78d6; --s2: #e0592a; --good: #1f7a45; --bad: #c4262e; --shade: rgba(196, 38, 46, .05); --shade-line: rgba(196, 38, 46, .55);
+  --r: 24px; --r-sm: 14px;
+}
+:root[data-theme="clay"] .panel { border: 0; box-shadow: 10px 12px 24px rgba(107, 79, 216, .14), inset -6px -8px 14px rgba(107, 79, 216, .08), inset 6px 8px 12px rgba(255, 255, 255, .9); }
+:root[data-theme="clay"] .btn, :root[data-theme="clay"] .theme-pick { border-radius: 999px; border-color: transparent; box-shadow: 4px 5px 10px rgba(107, 79, 216, .16), inset 2px 3px 4px rgba(255, 255, 255, .9); }
+
+/* Y2K (light): chrome gradients, bubbly accents, Tahoma-era type */
+:root[data-theme="y2k"] {
+  color-scheme: light;
+  --bg: #dfe9ff; --panel: #ffffff; --panel-2: #eef3ff; --screen: #ffffff; --bezel: #7f9cf5;
+  --ink: #101a3a; --ink-2: #33406a; --ink-3: #4f5b84;
+  --line: #b9c8f5; --grid: #e3eaff; --grid-2: #f2f5ff; --accent: #d61f8c; --accent-ink: #ffffff; --accent-soft: #fbd9ee;
+  --cmp: #4f5b84;
+  --s1: #2a78d6; --s2: #e0592a; --good: #0b7a3b; --bad: #c4262e; --shade: rgba(196, 38, 46, .05); --shade-line: rgba(196, 38, 46, .55);
+  --display: Tahoma, Verdana, "Segoe UI", sans-serif; --sans: Verdana, Tahoma, "Segoe UI", sans-serif; --r: 12px; --r-sm: 10px;
+}
+:root[data-theme="y2k"] body { background: linear-gradient(180deg, #c9d8ff 0%, #e8efff 40%, #f7e6ff 100%) fixed; }
+:root[data-theme="y2k"] .btn, :root[data-theme="y2k"] .theme-pick { background: linear-gradient(180deg, #ffffff 0%, #dbe4fb 48%, #c3d0f2 52%, #e7edfd 100%); border-color: #8ea6e8; }
+:root[data-theme="y2k"] .brand h1 { color: var(--accent); letter-spacing: .02em; }
+:root[data-theme="y2k"] .panel { border: 2px solid #b9c8f5; }
+
+/* Conceptual Sketch (light): pencil on grid paper, hand-drawn outlines */
+:root[data-theme="sketch"] {
+  color-scheme: light;
+  --bg: #fbfaf6; --panel: #fffefb; --panel-2: #f6f4ee; --screen: #ffffff; --bezel: #3a3a3a;
+  --ink: #232323; --ink-2: #474747; --ink-3: #5e5e5e;
+  --line: #3a3a3a; --grid: #e6e9ef; --grid-2: #f2f4f8; --accent: #1f4e9a; --accent-ink: #ffffff; --accent-soft: #dde7f7;
+  --cmp: #5e5e5e;
+  --s1: #2a78d6; --s2: #e0592a; --good: #2f6b34; --bad: #b3261e; --shade: rgba(179, 38, 30, .05); --shade-line: rgba(179, 38, 30, .55);
+  --display: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
+}
+:root[data-theme="sketch"] body { background-color: var(--bg); background-image: linear-gradient(#e9edf4 1px, transparent 1px), linear-gradient(90deg, #e9edf4 1px, transparent 1px); background-size: 22px 22px; }
+:root[data-theme="sketch"] .panel { border: 1.5px solid #3a3a3a; border-radius: 255px 14px 225px 14px / 14px 225px 14px 255px; }
+:root[data-theme="sketch"] .btn, :root[data-theme="sketch"] .theme-pick { border: 1.5px solid #3a3a3a; border-radius: 12px 4px 14px 5px / 5px 14px 4px 12px; }
+
+/* Pixel Art (dark): 8-bit frame, stepped corners, mono type; the plots keep smooth lines */
+:root[data-theme="pixel"] {
+  color-scheme: dark;
+  --bg: #1d1f2b; --panel: #262a3b; --panel-2: #2f3449; --screen: #11131b; --bezel: #f4f4f4;
+  --ink: #f4f4f4; --ink-2: #c7cbe0; --ink-3: #a3a8c4;
+  --line: #4a5070; --grid: #23283a; --grid-2: #181b27; --accent: #ffd23f; --accent-ink: #1d1f2b; --accent-soft: #3b3620;
+  --cmp: #c7cbe0;
+  --s1: #3d8ef5; --s2: #e2661e; --good: #5ee08a; --bad: #ff6b6b; --shade: rgba(255, 107, 107, .07); --shade-line: rgba(255, 107, 107, .55);
+  --display: Consolas, "Cascadia Mono", "Lucida Console", monospace; --r: 0px; --r-sm: 0px;
+}
+:root[data-theme="pixel"] .panel { border: 0; box-shadow: 0 -4px 0 0 #f4f4f4, 0 4px 0 0 #f4f4f4, -4px 0 0 0 #f4f4f4, 4px 0 0 0 #f4f4f4; margin: 4px; }
+:root[data-theme="pixel"] .card-head h2, :root[data-theme="pixel"] .controls h2, :root[data-theme="pixel"] .brand h1 { text-transform: uppercase; letter-spacing: .04em; }
+:root[data-theme="pixel"] .btn { border: 3px solid var(--ink); }
+
+/* Neumorphism (light): extruded soft surfaces; data stays on a flat white screen */
+:root[data-theme="neumorph"] {
+  color-scheme: light;
+  --bg: #e4e8ee; --panel: #e4e8ee; --panel-2: #dde2e9; --screen: #ffffff; --bezel: #b8c0cc;
+  --ink: #1f2733; --ink-2: #414c5c; --ink-3: #56616f;
+  --line: #cbd2dc; --grid: #e8ebf0; --grid-2: #f4f6f8; --accent: #2f5fb3; --accent-ink: #ffffff; --accent-soft: #d6e1f5;
+  --cmp: #56616f;
+  --s1: #2a78d6; --s2: #e0592a; --good: #0b7a3b; --bad: #c4262e; --shade: rgba(196, 38, 46, .05); --shade-line: rgba(196, 38, 46, .55);
+  --r: 18px; --r-sm: 12px;
+}
+:root[data-theme="neumorph"] .panel { border: 0; box-shadow: 8px 8px 16px #c3c9d2, -8px -8px 16px #ffffff; }
+:root[data-theme="neumorph"] .btn, :root[data-theme="neumorph"] .theme-pick, :root[data-theme="neumorph"] .field input, :root[data-theme="neumorph"] .field select { border: 0; box-shadow: 4px 4px 8px #c3c9d2, -4px -4px 8px #ffffff; }
+:root[data-theme="neumorph"] .field input, :root[data-theme="neumorph"] .field select { box-shadow: inset 3px 3px 6px #c3c9d2, inset -3px -3px 6px #ffffff; }
+:root[data-theme="neumorph"] .chart .frame { stroke: var(--bezel); }
+
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); }
 button, input, select { font: inherit; color: inherit; }
@@ -348,7 +513,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--line); border-bottom-width
 <body>
 <header class="top">
   <div class="brand"><h1>Filterlab</h1><span id="subtitle">Digital filter design</span></div>
-  <div class="top-actions"><button class="btn" id="tourBtn" title="A six-step walkthrough (shortcut: G)">Take the tour</button><button class="btn" id="copyPy" title="Copy the Python call that reproduces this design">Copy Python</button><label class="vh" for="theme">Theme</label><select class="theme-pick" id="theme" title="Theme (shortcut: T)"><option value="light">Instrument, light</option><option value="dark">Instrument, dark</option><option value="swiss">Swiss</option><option value="phosphor">Phosphor</option><option value="paper">Paper</option></select><button class="btn icon" id="helpBtn" aria-label="Keyboard shortcuts" aria-keyshortcuts="?" title="Keyboard shortcuts (?)">?</button></div>
+  <div class="top-actions"><button class="btn" id="tourBtn" title="A six-step walkthrough (shortcut: G)">Take the tour</button><button class="btn" id="copyPy" title="Copy the Python call that reproduces this design">Copy Python</button><label class="vh" for="theme">Theme</label><select class="theme-pick" id="theme" title="Theme (shortcut: T)"></select><button class="btn icon" id="helpBtn" aria-label="Keyboard shortcuts" aria-keyshortcuts="?" title="Keyboard shortcuts (?)">?</button></div>
 </header>
 <main class="app">
   <aside class="panel controls" id="controls" aria-label="Filter design controls"></aside>
@@ -2333,7 +2498,10 @@ function wireTour() {
   addEventListener('resize', () => { if (tourAt >= 0) tourGo(tourAt); });
 }
 /* ---------- themes: Instrument light/dark, Swiss, Phosphor, Paper; the choice is remembered per viewer ---------- */
-const THEMES = ['light', 'dark', 'swiss', 'phosphor', 'paper'];
+const THEME_LIST = [['light', 'Instrument, light'], ['dark', 'Instrument, dark'], ['swiss', 'Swiss'], ['phosphor', 'Phosphor'], ['paper', 'Paper (wabi-sabi)'],
+  ['synthwave', 'Synthwave'], ['cyberpunk', 'Cyberpunk'], ['neobrutal', 'Neo-brutalism'], ['editorial', 'Editorial'], ['luxury', 'Luxury typography'],
+  ['glass', 'Glassmorphism'], ['clay', 'Claymorphism'], ['y2k', 'Y2K'], ['sketch', 'Conceptual sketch'], ['pixel', 'Pixel art'], ['neumorph', 'Neumorphism']];
+const THEMES = THEME_LIST.map(t => t[0]);
 function storedTheme() { try { const t = localStorage.getItem('filterlab.theme'); return THEMES.includes(t) ? t : null; } catch (e) { return null; } }
 function setTheme(t, remember) {
   if (!THEMES.includes(t)) t = 'light';
@@ -2466,14 +2634,18 @@ function render() {
 }
 
 function init() {
-  setTheme(storedTheme() || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), false);
+  $('#theme').innerHTML = THEME_LIST.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  const qs = new URLSearchParams(location.search);   // deep links from the landing page: ?theme=…&tab=…
+  if (['response', 'time', 'quant', 'signal'].includes(qs.get('tab'))) state.tab = qs.get('tab');
+  setTheme(THEMES.includes(qs.get('theme')) ? qs.get('theme') : storedTheme() || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), false);
   $('#theme').addEventListener('change', e => setTheme(e.target.value, true));
   document.addEventListener('toggle', e => { const el = e.target; if (el.tagName === 'DETAILS' && el.open) { el.classList.add('opening'); setTimeout(() => el.classList.remove('opening'), 200); } }, true);
   addEventListener('keydown', shortcuts); $('#helpBtn').addEventListener('click', openHelp); wireTour();
   $('#copyPy').addEventListener('click', () => current && copy(pythonSnippet(current)));
-  $$('.tabs button').forEach(b => b.addEventListener('click', () => {
+  $$('.tabs button').forEach(b => b.addEventListener('click', ev => {
     if (state.tab === b.dataset.tab) return;
     state.tab = b.dataset.tab; render();
+    if (ev.detail === 0) return;   // keyboard-initiated: no motion (frequent action)
     const v = $('#view'); v.classList.toggle('enter', false); void v.offsetWidth; v.classList.add('enter');   // a short fade answers the tab change (CSS skips it under reduced motion)
   }));
   buildControls(); syncControls();

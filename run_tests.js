@@ -23,9 +23,10 @@ function run(cmd, args) {
 const py = () => { const l = python(); return (...a) => run(l[0], [...l.slice(1), ...a]); };
 const tasks = {
   build: () => py()('web/build.py'),
+  site: () => { tasks.build(); run(process.execPath, ['web/site/capture.js']); },   // rebuild, then refresh the landing page screenshots
   py: () => py()('-m', 'pytest', 'tests', '-q'),
   js: () => { py()('tests/export_reference.py'); run(process.execPath, ['tests/cross_check.js']); },
-  ui: () => { tasks.build(); run(process.execPath, ['tests/ui_sweep.js']); run(process.execPath, ['tests/ui_shots.js']); },
+  ui: () => { tasks.build(); run(process.execPath, ['tests/ui_sweep.js']); run(process.execPath, ['tests/ui_shots.js']); run(process.execPath, ['tests/site_check.js']); },
   rtlsim: () => { py()('tests/export_reference.py'); run(process.execPath, ['tests/rtlsim_check.js']); },
   rtl: () => { const p = py(); p('-m', 'pytest', 'tests/test_rtl.py', '-q'); p('tests/rtl_sim.py'); },
   all: () => { tasks.py(); tasks.js(); tasks.rtl(); tasks.rtlsim(); tasks.ui(); console.log('\nall test suites passed'); },

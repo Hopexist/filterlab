@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filterlab: filter design, fixed point and hardware in the browser</title>
+<meta name="description" content="Design FIR and IIR filters, see what fixed-point rounding does to them, export SystemVerilog and simulate it clock by clock, all in one offline web page.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23161a1d'/%3E%3Cpath d='M14 36H44C56 36 56 74 70 74H86' fill='none' stroke='%233d8ef5' stroke-width='10' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b0d0f; --panel: #12161a; --panel-2: #181d22; --line: #262d33; --ink: #eef1f3; --ink-2: #b6bfc6; --ink-3: #96a0a8;
+  --blue: #3d8ef5; --orange: #e2661e; --accent: #73c4d2; --good: #4fd18a;
+  --display: Bahnschrift, "DIN Alternate", "DIN Next", Barlow, "Roboto Condensed", system-ui, sans-serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --edge: max(24px, calc((100vw - 1200px) / 2));
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .stage .cursor, .stage .scene, .stage .chip, .btn, .card, .gallery a, .card .shot img { transition: none !important; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 var(--sans); }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+::selection { background: var(--accent); color: #0b0d0f; }
+h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.01em; }
+.num { font-variant-numeric: tabular-nums; }
+.wrap { padding: 0 var(--edge); }
+
+/* nav */
+nav { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 28px; padding: 14px var(--edge); background: rgba(11, 13, 15, .82); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font: 700 20px var(--display); }
+.brand svg { width: 30px; height: 30px; }
+nav .links { display: flex; gap: 22px; margin-left: auto; font-size: 15px; }
+nav .links a { color: var(--ink-2); text-decoration: none; }
+nav .links a:hover { color: var(--ink); }
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); text-decoration: none; font: 600 15px var(--sans); cursor: pointer; transition: transform 140ms var(--ease-out), background-color 140ms ease, border-color 140ms ease; }
+.btn.primary { background: var(--accent); color: #071114; border-color: var(--accent); }
+.btn:active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) { .btn:hover { border-color: var(--ink-3); } .btn.primary:hover { background: #8fd3de; } }
+
+/* hero: alone on the first screen */
+.hero { min-height: calc(100vh - 73px); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); align-items: center; gap: 48px; padding: 48px var(--edge) 64px; }
+.hero h1 { font-size: clamp(40px, 5.4vw, 72px); line-height: 1.02; font-weight: 700; }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero p.lede { font-size: 19px; color: var(--ink-2); max-width: 34em; margin: 22px 0 30px; }
+.hero .ctas { display: flex; gap: 12px; flex-wrap: wrap; }
+.facts { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 40px; color: var(--ink-3); font-size: 14px; }
+.facts b { display: block; font: 600 30px var(--display); color: var(--ink); font-variant-numeric: tabular-nums; }
+.scope { position: relative; border: 1px solid #3a4447; border-radius: 10px; background: #070909; padding: 18px; box-shadow: 0 30px 80px rgba(0, 0, 0, .5); }
+.scope svg { display: block; width: 100%; height: auto; }
+.scope .legend { display: flex; gap: 18px; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+.scope .legend i { display: inline-block; width: 18px; border-top: 3px solid; vertical-align: middle; margin-right: 7px; }
+.scope .legend i.q { border-top-width: 1.6px; }
+.hz { font: 12px var(--sans); fill: var(--ink-3); }
+
+/* sections */
+section { padding: 96px var(--edge); border-top: 1px solid var(--line); scroll-margin-top: 64px; }
+section > h2 { font-size: clamp(30px, 3.4vw, 46px); line-height: 1.1; max-width: 22em; }
+section > p.sub { color: var(--ink-2); font-size: 18px; max-width: 40em; margin: 14px 0 40px; }
+
+/* demo stage (StageShow-style): real screens, a scripted pointer, captions that change with the scene */
+.stage { position: relative; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); overflow: hidden; aspect-ratio: 16 / 10; }
+.stage .scene { position: absolute; inset: 0; opacity: 0; transition: opacity 420ms var(--ease-in-out); }
+.stage .scene.on { opacity: 1; }
+.stage .scene img { width: 100%; height: 100%; object-fit: cover; object-position: top left; display: block; }
+.stage .cursor { position: absolute; left: 0; top: 0; width: 22px; height: 22px; pointer-events: none; transition: transform 900ms var(--ease-in-out); filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .6)); }
+.stage .ring { position: absolute; width: 38px; height: 38px; margin: -19px 0 0 -19px; border: 2px solid var(--accent); border-radius: 50%; opacity: 0; pointer-events: none; }
+.stage .ring.ping { animation: ping 520ms var(--ease-out); }
+@keyframes ping { from { opacity: .9; transform: scale(.5); } to { opacity: 0; transform: scale(1.4); } }
+.stage .chip { position: absolute; left: 20px; bottom: 20px; max-width: min(460px, calc(100% - 40px)); background: rgba(11, 13, 15, .9); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 15px; transition: opacity 260ms var(--ease-out), transform 260ms var(--ease-out); }
+.stage .chip b { display: block; font: 600 17px var(--display); margin-bottom: 2px; }
+.stage .chip.swap { opacity: 0; transform: translateY(6px); }
+.stage-ctl { display: flex; align-items: center; gap: 14px; margin-top: 16px; flex-wrap: wrap; }
+.stage-ctl .dots { display: flex; gap: 8px; }
+.stage-ctl .dots button { min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink-2); font: 14px var(--sans); cursor: pointer; }
+.stage-ctl .dots button[aria-current="true"] { color: #071114; background: var(--accent); border-color: var(--accent); }
+.bar { flex: 1; min-width: 120px; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; transform: scaleX(0); }
+
+/* bento grid */
+.bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-rows: 240px; gap: 16px; }
+.card { position: relative; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); overflow: hidden; display: flex; flex-direction: column; text-decoration: none; transition: transform 200ms var(--ease-out), border-color 200ms ease; }
+@media (hover: hover) and (pointer: fine) { a.card:hover { transform: translateY(-2px); border-color: #3a4447; } a.card:hover .shot img { transform: scale(1.025); } }
+.card .txt { padding: 20px 22px 0; }
+.card h3 { font-size: 21px; }
+.card p { color: var(--ink-2); font-size: 15px; margin: 6px 0 0; }
+.card .shot { flex: 1; margin-top: 16px; overflow: hidden; border-top: 1px solid var(--line); }
+.card .shot img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 300ms var(--ease-out); }
+.c1 { grid-column: span 4; grid-row: span 2; } .c2 { grid-column: span 2; grid-row: span 2; } .c3 { grid-column: span 3; grid-row: span 2; }
+.c4 { grid-column: span 3; grid-row: span 2; } .c5 { grid-column: span 2; } .c6 { grid-column: span 2; } .c7 { grid-column: span 2; }
+.card pre { flex: 1; margin: 16px 0 0; padding: 14px 18px; background: #090b0d; border-top: 1px solid var(--line); font: 12.5px/1.5 var(--mono); color: #c9d4dc; overflow: hidden; white-space: pre; }
+.card pre .k { color: var(--accent); } .card pre .c { color: #7f8b94; } .card pre .n { color: #f0b37e; }
+.card .nums { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; padding: 16px 22px 22px; margin-top: auto; }
+.card .nums b { display: block; font: 600 30px var(--display); font-variant-numeric: tabular-nums; }
+.card .nums span { color: var(--ink-3); font-size: 13px; }
+.swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 14px 22px 22px; margin-top: auto; }
+.swatches img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top left; border-radius: 4px; border: 1px solid var(--line); }
+.sheet { flex: 1; margin-top: 14px; background: #fff; border-top: 1px solid var(--line); overflow: hidden; }
+.sheet img { width: 100%; height: 100%; object-fit: cover; object-position: top left; display: block; }
+
+/* theme gallery */
+.gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.gallery a { text-decoration: none; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); transition: transform 200ms var(--ease-out), border-color 200ms ease; }
+@media (hover: hover) and (pointer: fine) { .gallery a:hover { transform: translateY(-2px); border-color: #3a4447; } }
+.gallery img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top left; display: block; }
+.gallery span { display: flex; justify-content: space-between; padding: 10px 14px; font: 600 15px var(--display); }
+.gallery span small { font: 13px var(--sans); color: var(--ink-3); }
+
+/* honest limits */
+.limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.limits div { border: 1px solid var(--line); border-radius: 12px; padding: 22px; background: var(--panel); }
+.limits h3 { font-size: 19px; margin-bottom: 6px; }
+.limits p { color: var(--ink-2); margin: 0; font-size: 15px; }
+.limits .warn { border-color: #6b3b20; }
+footer { padding: 40px var(--edge) 56px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 14px; display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+
+/* load: the hero enters once (marketing page), everything else answers scroll or a click */
+@media (prefers-reduced-motion: no-preference) {
+  .enter { animation: rise 600ms var(--ease-out) both; }
+  .enter.d2 { animation-delay: 80ms; } .enter.d3 { animation-delay: 160ms; } .enter.d4 { animation-delay: 240ms; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+  .draw { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: draw 1400ms var(--ease-in-out) 300ms forwards; }
+  .draw.late { animation-delay: 900ms; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+}
+
+/* responsive */
+@media (max-width: 980px) {
+  .hero { grid-template-columns: minmax(0, 1fr); min-height: 0; padding-top: 32px; }
+  .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 220px; }
+  .c1, .c2, .c3, .c4 { grid-column: span 2; } .c5, .c6, .c7 { grid-column: span 1; }
+  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  nav .links a.hide-sm { display: none; }
+}
+@media (max-width: 600px) {
+  nav { gap: 12px; } nav .links { gap: 14px; font-size: 14px; } nav .btn { display: none; }
+  .bento { grid-template-columns: minmax(0, 1fr); } .c5, .c6, .c7 { grid-column: span 1; }
+  .limits { grid-template-columns: minmax(0, 1fr); }
+  .stage { aspect-ratio: 16 / 10; overflow: visible; margin-bottom: 120px; }
+  .stage .scene { border-radius: 14px; overflow: hidden; }
+  .stage .chip { left: 0; right: 0; bottom: auto; top: calc(100% + 12px); max-width: none; }
+  section { padding: 64px var(--edge); }
+}
+</style>
+</head>
+<body>
+<nav aria-label="Main">
+  <a class="brand" href="#top" aria-label="Filterlab, top of page">
+    <svg viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22" fill="#161a1d" stroke="#2c3338" stroke-width="2"/><path d="M14 36H42V42H48V52H53V62H58V72H86" fill="none" stroke="#e2661e" stroke-width="4"/><path d="M14 36H44C56 36 56 74 70 74H86" fill="none" stroke="#3d8ef5" stroke-width="7" stroke-linecap="round"/></svg>
+    Filterlab
+  </a>
+  <div class="links"><a href="#demo">Demo</a><a href="#features">Features</a><a href="#themes" class="hide-sm">Themes</a><a href="#limits" class="hide-sm">Limits</a><a href="https://github.com/Hopexist/filterlab">GitHub</a></div>
+  <a class="btn primary" href="app/">Open Filterlab</a>
+</nav>
+
+<header class="hero" id="top">
+  <div>
+    <h1 class="enter">Design a filter.<br>Round it to hardware.<br><em>Watch the gates run.</em></h1>
+    <p class="lede enter d2">Filterlab is a filter design bench that runs in one offline web page. Design FIR and IIR filters, see what fixed-point rounding does to them, then export SystemVerilog and simulate it clock by clock.</p>
+    <div class="ctas enter d3"><a class="btn primary" href="app/">Open Filterlab</a><a class="btn" href="#demo">Watch the demo</a></div>
+    <div class="facts enter d4"><div><b>91</b>library tests against SciPy</div><div><b>204</b>JS-vs-Python checks</div><div><b>86</b>hardware interpreter checks</div></div>
+  </div>
+  <figure class="scope enter d2" aria-label="An ideal low-pass response and its version with 7-bit coefficients" style="margin:0">
+    <svg viewBox="0 0 600 360" id="heroPlot" role="img" aria-label="Magnitude response of a 41-tap low-pass: the ideal filter reaches about minus 60 dB in the stopband; with coefficients rounded to 7 bits the stopband rises to about minus 30 dB."></svg>
+    <figcaption class="legend"><span><i style="border-color:var(--blue)"></i>Ideal (floating point)</span><span><i class="q" style="border-color:var(--orange)"></i>Taps rounded to 7 bits: the stopband leaks</span></figcaption>
+  </figure>
+</header>
+
+<section id="demo" aria-labelledby="demoH">
+  <h2 id="demoH">From a spec to simulated hardware in four steps</h2>
+  <p class="sub">The real app, step by step: design a Chebyshev low-pass, round it to 10-bit coefficients, export the SystemVerilog, and run it in the page.</p>
+  <div class="stage" id="stage" aria-roledescription="demo" aria-label="Product demo">
+    <div class="scene on"><img src="assets/stage-1-design.jpg" alt="Response tab: magnitude plot with draggable band edges, phase, pole-zero plot and a spec check" width="1280" height="800"></div>
+    <div class="scene"><img src="assets/stage-2-quantize.jpg" alt="Quantization tab: the response before and after rounding to 10 bits, with rounding effects" width="1280" height="800" loading="lazy"></div>
+    <div class="scene"><img src="assets/stage-3-export.jpg" alt="Hardware export card with copy and download buttons and a hardware cost report" width="1280" height="800" loading="lazy"></div>
+    <div class="scene"><img src="assets/stage-4-simulate.jpg" alt="Simulate hardware panel: waveform of clock, input, accumulators and output, 20 of 20 samples identical" width="1280" height="800" loading="lazy"></div>
+    <svg class="cursor" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2L18 11L11 12.5L8 19Z" fill="#fff" stroke="#000" stroke-width="1.3" stroke-linejoin="round"/></svg>
+    <div class="ring" aria-hidden="true"></div>
+    <div class="chip" aria-live="polite"><b>1 · Design</b>Drag the P and S tabs; the order search finds the smallest filter that meets the spec.</div>
+  </div>
+  <div class="stage-ctl">
+    <button class="btn" id="play" aria-pressed="false">Play</button>
+    <div class="dots" role="group" aria-label="Demo steps"><button aria-current="true">Design</button><button>Quantize</button><button>Export</button><button>Simulate</button></div>
+    <div class="bar" aria-hidden="true"><i id="barI"></i></div>
+  </div>
+</section>
+
+<section id="features" aria-labelledby="featH">
+  <h2 id="featH">Everything between the textbook filter and the chip</h2>
+  <p class="sub">A numpy library and a line-for-line JavaScript port, cross-checked to machine precision, behind one interface.</p>
+  <div class="bento">
+    <a class="card c1" href="app/?tab=response"><div class="txt"><h3>Design on the plot</h3><p>Windowed and Parks-McClellan FIR, Butterworth, Chebyshev and elliptic IIR. Drag the band edges; the order search does the rest.</p></div><div class="shot"><img src="assets/stage-1-design.jpg" alt="" loading="lazy" style="object-position:30% 18%"></div></a>
+    <a class="card c2" href="app/?tab=quant"><div class="txt"><h3>See what rounding does</h3><p>Pick a word length; watch poles move and the stopband leak. Noise is measured against theory.</p></div><div class="shot"><img src="assets/stage-2-quantize.jpg" alt="" loading="lazy" style="object-position:62% 30%"></div></a>
+    <a class="card c3" href="app/?tab=quant"><div class="txt"><h3>Export SystemVerilog</h3><p>A synthesizable module, testbench and vectors whose arithmetic matches the bit-true model.</p></div>
+<pre aria-label="Generated SystemVerilog excerpt"><span class="k">module</span> filterlab_sos (
+  <span class="k">input</span>  logic clk, rst, in_valid,
+  <span class="k">input</span>  logic signed [15:0] in_data,
+  <span class="k">output</span> logic signed [15:0] out_data );
+  <span class="c">// section 0: b = 380 760 380, a = 1 -25474 10638</span>
+  <span class="k">assign</span> s0_acc = (<span class="n">10'sd380</span>) * xs + (<span class="n">11'sd760</span>) * s0_x1
+    + (<span class="n">10'sd380</span>) * s0_x2 - (<span class="n">-16'sd25474</span>) * s0_y1 ...
+  <span class="k">assign</span> s0_yr = s0_accr >>> <span class="n">14</span>;</pre></a>
+    <a class="card c4" href="app/?tab=quant"><div class="txt"><h3>Simulate it, clock by clock</h3><p>An interpreter runs the generated text with SystemVerilog's width rules and compares every sample.</p></div><div class="shot"><img src="assets/stage-4-simulate.jpg" alt="" loading="lazy" style="object-position:100% 35%"></div></a>
+    <a class="card c5" href="#themes"><div class="txt"><h3>16 themes</h3><p>From Instrument to Pixel art; the plots stay readable in all of them.</p></div><div class="swatches"><img src="assets/theme-phosphor.jpg" alt="" loading="lazy"><img src="assets/theme-neobrutal.jpg" alt="" loading="lazy"><img src="assets/theme-synthwave.jpg" alt="" loading="lazy"><img src="assets/theme-paper.jpg" alt="" loading="lazy"></div></a>
+    <div class="card c6"><div class="txt"><h3>Checked, not claimed</h3><p>Every number has a test behind it.</p></div><div class="nums"><div><b>91</b><span>pytest vs SciPy</span></div><div><b>204</b><span>JS vs Python</span></div><div><b>86</b><span>RTL interpreter</span></div><div><b>16</b><span>themes swept for AA</span></div></div></div>
+    <a class="card c7" href="assets/spec-sheet.svg"><div class="txt"><h3>Spec sheet drawing</h3><p>Download any design as a dimensioned SVG.</p></div><div class="sheet"><img src="assets/spec-sheet.svg" alt="" loading="lazy"></div></a>
+  </div>
+</section>
+
+<section id="themes" aria-labelledby="themeH">
+  <h2 id="themeH">Sixteen ways to look at the same filter</h2>
+  <p class="sub">Each theme styles the frame; the plot screens stay solid and every trace pair passes a colour-vision check. Click one to open the app in it.</p>
+  <div class="gallery" id="gallery"></div>
+</section>
+
+<section id="limits" aria-labelledby="limH">
+  <h2 id="limH">What is verified, and what is not</h2>
+  <p class="sub">Said plainly, because a tool that rounds things for a living should not round its own claims.</p>
+  <div class="limits">
+    <div><h3>The hardware is simulated in-house</h3><p>The SystemVerilog has not been run in a standard HDL simulator or synthesized. Two interpreters written for this project check it; running the testbench in Icarus Verilog would close that gap.</p></div>
+    <div><h3>Costs are counts, not area</h3><p>The hardware report counts multipliers, adders and register bits. It makes no claim about area, clock speed or power.</p></div>
+    <div class="warn"><h3>Known issue: very long equiripple filters</h3><p>Parks-McClellan designs of about 160 taps and more currently return an empty filter that the spec check wrongly passes. The automatic order search never goes there; a manual order can.</p></div>
+    <div><h3>Fixed point in the browser</h3><p>The browser simulation uses doubles, exact to 2<sup>53</sup>, so signal and coefficient words are limited to 20 and 24 bits there. The Python library has no such limit.</p></div>
+  </div>
+</section>
+
+<footer><span>Filterlab · a signal-processing portfolio project</span><span><a href="https://github.com/Hopexist/filterlab">Source on GitHub</a> · <a href="app/">Open the app</a></span></footer>
+
+<script>
+(() => {
+  'use strict';
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* hero plot: a real 41-tap Blackman low-pass (1 kHz at 8 kHz), ideal and with taps rounded to 7 fraction bits: the stopband floor rises from -60 to about -30 dB */
+  const svg = document.getElementById('heroPlot'), W = 600, H = 360, L = 48, R = 12, T = 14, B = 34, iw = W - L - R, ih = H - T - B, N = 400, M = 41, fc = 1000 / 8000;
+  const h = Array.from({ length: M }, (_, n) => { const k = n - (M - 1) / 2, sinc = k === 0 ? 2 * fc : Math.sin(2 * Math.PI * fc * k) / (Math.PI * k);
+    return sinc * (0.42 - 0.5 * Math.cos(2 * Math.PI * n / (M - 1)) + 0.08 * Math.cos(4 * Math.PI * n / (M - 1))); });
+  const resp = c => Array.from({ length: N }, (_, i) => { const w = Math.PI * i / (N - 1); let re = 0, im = 0; c.forEach((v, n) => { re += v * Math.cos(w * n); im -= v * Math.sin(w * n); }); return 20 * Math.log10(Math.max(Math.hypot(re, im), 1e-6)); });
+  const ideal = resp(h), rounded = resp(h.map(v => Math.round(v * 128) / 128));
+  const y0 = -90, sx = i => L + i / (N - 1) * iw, sy = v => T + (1 - (Math.max(v, y0) - y0) / (5 - y0)) * ih;
+  const path = ys => ys.map((v, i) => (i ? 'L' : 'M') + sx(i).toFixed(1) + ' ' + sy(v).toFixed(1)).join('');
+  let s = '';
+  for (let v = 0; v >= y0; v -= 15) s += `<line x1="${L}" x2="${W - R}" y1="${sy(v)}" y2="${sy(v)}" stroke="#16211f"/><text class="hz" x="${L - 8}" y="${sy(v) + 4}" text-anchor="end">${v}</text>`;
+  for (let k = 0; k <= 4; k++) { const x = L + k / 4 * iw; s += `<line x1="${x}" x2="${x}" y1="${T}" y2="${T + ih}" stroke="#16211f"/><text class="hz" x="${x}" y="${H - 12}" text-anchor="middle">${k * 1000} Hz</text>`; }
+  s += `<rect x="${L}" y="${T}" width="${iw}" height="${ih}" fill="none" stroke="#3a4447"/>`;
+  s += `<path class="draw" d="${path(ideal)}" fill="none" stroke="var(--blue)" stroke-width="3.5" stroke-linejoin="round" style="filter:drop-shadow(0 0 4px rgba(61,142,245,.45))"/>`;
+  s += `<path class="draw late" d="${path(rounded)}" fill="none" stroke="var(--orange)" stroke-width="1.6" stroke-linejoin="round"/>`;
+  svg.innerHTML = s;
+  svg.querySelectorAll('.draw').forEach(p => p.style.setProperty('--len', Math.ceil(p.getTotalLength())));
+
+  /* demo stage: four real screens, a scripted pointer and captions; plays when asked or when it scrolls into view, pauses on request */
+  const STEPS = [
+    { t: '1 · Design', d: 'Drag the P and S tabs; the order search finds the smallest filter that meets the spec.', at: [0.47, 0.22] },
+    { t: '2 · Quantize', d: 'Round to 10-bit coefficients. The thin orange response shows what the hardware will really compute.', at: [0.38, 0.11] },
+    { t: '3 · Export', d: 'Copy or download SystemVerilog, a testbench and vectors for exactly these settings.', at: [0.48, 0.16] },
+    { t: '4 · Simulate', d: 'An interpreter runs the module clock by clock: 20 of 20 samples identical to the bit-true model.', at: [0.72, 0.21] },
+  ];
+  const stage = document.getElementById('stage'), scenes = [...stage.querySelectorAll('.scene')], cur = stage.querySelector('.cursor'), ring = stage.querySelector('.ring'), chip = stage.querySelector('.chip');
+  const dots = [...document.querySelectorAll('.dots button')], play = document.getElementById('play'), bar = document.getElementById('barI');
+  let at = 0, timer = 0, playing = false, barAnim = null; const DWELL = 3600;
+  const place = (i, ping) => { const r = stage.getBoundingClientRect(), [fx, fy] = STEPS[i].at; cur.style.transform = `translate(${fx * r.width}px, ${fy * r.height}px)`;
+    if (ping && !calm) setTimeout(() => { ring.style.left = fx * r.width + 'px'; ring.style.top = fy * r.height + 'px'; ring.classList.remove('ping'); void ring.offsetWidth; ring.classList.add('ping'); }, 900); };
+  function show(i, ping = true) {
+    at = (i + STEPS.length) % STEPS.length; scenes.forEach((s, k) => s.classList.toggle('on', k === at)); dots.forEach((d, k) => d.setAttribute('aria-current', String(k === at)));
+    chip.classList.add('swap'); setTimeout(() => { chip.innerHTML = `<b>${STEPS[at].t}</b>${STEPS[at].d}`; chip.classList.remove('swap'); }, calm ? 0 : 160);
+    place(at, ping);
+    if (barAnim) barAnim.cancel(); if (playing && !calm) barAnim = bar.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: DWELL, easing: 'linear', fill: 'forwards' });
+  }
+  function setPlaying(on) { playing = on; play.setAttribute('aria-pressed', String(on)); play.textContent = on ? 'Pause' : 'Play'; clearInterval(timer); if (barAnim) barAnim.cancel();
+    if (on) { show(at, true); timer = setInterval(() => show(at + 1), DWELL); } }
+  play.addEventListener('click', () => setPlaying(!playing));
+  dots.forEach((d, k) => d.addEventListener('click', () => { setPlaying(false); show(k); }));
+  addEventListener('resize', () => place(at, false));
+  place(0, false);
+  if (!calm && 'IntersectionObserver' in window) { let started = false; new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting && !started) { started = true; setPlaying(true); } else if (!e.isIntersecting && playing) setPlaying(false); }), { threshold: .55 }).observe(stage); }
+
+  /* theme gallery from the captured thumbnails */
+  const THEMES = [['light', 'Instrument', 'light'], ['dark', 'Instrument', 'dark'], ['swiss', 'Swiss', 'light'], ['phosphor', 'Phosphor', 'dark'], ['paper', 'Paper', 'light'], ['synthwave', 'Synthwave', 'dark'],
+    ['cyberpunk', 'Cyberpunk', 'dark'], ['neobrutal', 'Neo-brutalism', 'light'], ['editorial', 'Editorial', 'light'], ['luxury', 'Luxury', 'dark'], ['glass', 'Glassmorphism', 'dark'], ['clay', 'Claymorphism', 'light'],
+    ['y2k', 'Y2K', 'light'], ['sketch', 'Conceptual sketch', 'light'], ['pixel', 'Pixel art', 'dark'], ['neumorph', 'Neumorphism', 'light']];
+  document.getElementById('gallery').innerHTML = THEMES.map(([id, name, mode]) => `<a href="app/?theme=${id}"><img src="assets/theme-${id}.jpg" alt="Filterlab in the ${name} theme" loading="lazy" width="800" height="500"><span>${name}<small>${mode}</small></span></a>`).join('');
+})();
+</script>
+</body>
+</html>

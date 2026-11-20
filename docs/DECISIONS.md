@@ -184,3 +184,13 @@ Format: decision / why / rejected alternative.
   - Glassmorphism's frosted buttons first hid the selected-segment state; fixed.
 - **Emil's frequency rule applied:** a tab switch from the keyboard (1-4) no longer animates, while a pointer click keeps the short fade.
 - **Deep links:** `?theme=` and `?tab=`, so the landing page can open the app in a given theme or tab.
+- **Landing page (GitHub Pages, `docs/index.html` from `web/site/index.html`).** It follows the Taste rules: the hero alone on the first screen, real product UI in every card (screenshots captured by `web/site/capture.js`), equal edges, 2 px card lift on real pointers only, and one entrance on load. It has:
+  - a StageShow-style demo stage: four real screens, a scripted pointer, changing captions, step buttons, a Play/Pause control, and it plays when scrolled into view and pauses when it leaves;
+  - a bento grid of features;
+  - a 16-theme gallery that deep-links into the app;
+  - an honest-limits section that names the Remez issue.
+
+  The hero plot is a real 41-tap Blackman low-pass computed in the page, with its taps rounded to 7 bits; the stopband rises from -60 to about -30 dB. A Butterworth showed no difference: its zeros stay at z = -1 whatever the rounding.
+- **Brand mark** (Brand Identity rules, applied by hand): one mechanism, "the mark is the product's subject": the ideal response curve (blue) over its quantized staircase (orange) on an ink tile, built from primitives on a 100-unit grid. The favicon drops the staircase so it stays legible at 16 px.
+- **Spec sheet in Dimensional Drawing house style:** monochrome (black curve, gray dashed limits, pass/fail by weight and underline instead of colour), and a drawing line with DWG NO., REV, SCALE NTS, units and date.
+- **Motion on the landing page** follows Emil's skill: strong ease-out and ease-in-out tokens, transform and opacity only, hover gated to fine pointers, and with reduced motion no transitions at all (no glide, crossfade or autoplay). `tests/site_check.js` (part of `npm run test:ui`) checks this, plus images, anchors, sideways scroll at 1440 and 390 px, the demo controls, the gallery matching the app's themes, and a deep link.
